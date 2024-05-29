@@ -1,4 +1,4 @@
-use game_logic::{Board, Tile, WordList};
+use game_logic::{Board, Game, Modifier, Tile};
 
 fn main() {
     println!("Empty board:\n{}", game_logic::Board::default());
@@ -11,8 +11,23 @@ fn main() {
     board[0][0] = Some(Tile::A);
     board[0][1] = Some(Tile::A);
     board[0][2] = Some(Tile::A);
-    println!("{board}");
+    println!("Board with some letters:\n{board}");
 
-    let wordlist = WordList::load().unwrap();
-    println!("{wordlist:?}");
+    let game = Game::new(4);
+    println!("Empty randomized game:\n{game}");
+
+    println!("Modifiers on a board:");
+    for x in 0..15usize {
+        for y in 0..15usize {
+            let c = match game_logic::MODIFIERS.get(&(x, y)) {
+                Some(Modifier::DoubleLetter) => 'd',
+                Some(Modifier::TripleLetter) => 't',
+                Some(Modifier::DoubleWord) => 'D',
+                Some(Modifier::TripleWord) => 'T',
+                None => '‧',
+            };
+            print!("{c}");
+        }
+        println!()
+    }
 }

@@ -1,22 +1,25 @@
-#![allow(unused)]
+// #![allow(unused)]
 
 //! Sources:
 //! - <https://hasbro-new.custhelp.com/app/answers/detail/a_id/55/~/what-is-the-total-face-value-of-all-the-scrabble-tiles%3F>
 //! - <https://hasbro-new.custhelp.com/app/answers/detail/a_id/19/related/1>
 //! - <https://i.pinimg.com/originals/9a/91/ab/9a91abcf38624a17c3b158a56eaa7e84.jpg>
 //! - <https://github.com/dwyl/english-words>
+//! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
-use rand::seq::SliceRandom;
+mod std_impls;
+
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Display,
+    collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader},
-    ops::{Index, IndexMut},
-    sync::Mutex,
+    path::Path,
 };
 
 #[rustfmt::skip]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Tile {
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank,
@@ -81,63 +84,99 @@ impl Tile {
     }
 }
 
-impl Display for Tile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_char())
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
-enum Modifier {
+pub enum Modifier {
     DoubleLetter,
     TripleLetter,
     DoubleWord,
     TripleWord,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
+pub enum Direction {
+    Right,
+    Down,
+}
+
+pub type Point = (usize, usize);
+
+/// Includes the center as a double word modifier.
+pub static MODIFIERS: Lazy<HashMap<Point, Modifier>> = Lazy::new(|| {
+    type Points = &'static [Point];
+
+    #[rustfmt::skip]
+    const TRIPLE_WORDS: Points = &[
+        (0, 0), (0, 7), (0, 14), (7, 0), (7, 14), (14, 0), (14, 7), (14, 14),
+    ];
+
+    #[rustfmt::skip]
+    const DOUBLE_WORDS: Points = &[
+        (7, 7), // Center
+        (1, 1), (2, 2), (3, 3), (4, 4), (10, 10), (11, 11), (12, 12), (13, 13), (1, 13), (2, 12), (3, 11), (4, 10), (13, 1), (12, 2), (11, 3), (10, 4),
+    ];
+
+    #[rustfmt::skip]
+    const TRIPLE_LETTERS: Points = &[
+        (1, 5), (1, 9), (5, 1), (5, 5), (5, 9), (5, 13), (9, 1), (9, 5), (9, 9), (9, 13), (13, 5), (13, 9),
+    ];
+
+    #[rustfmt::skip]
+    const DOUBLE_LETTERS: Points = &[
+        (0, 3), (0, 11), (3, 0), (11, 0), (14, 3), (14, 11), (3, 14), (11, 14), (2, 6), (2, 8), (3, 7), (6, 2), (8, 2), (7, 3), (6, 12), (8, 12), (7, 11), (12, 6), (12, 8), (11, 7), (6, 6), (6, 8), (8, 8), (8, 6),
+    ];
+
+    fn map(ps: Points, m: Modifier) -> impl Iterator<Item = ((usize, usize), Modifier)> {
+        ps.iter().map(move |&p| (p, m))
+    }
+
+    let iter = map(TRIPLE_WORDS, Modifier::TripleWord)
+        .chain(map(DOUBLE_WORDS, Modifier::DoubleWord))
+        .chain(map(TRIPLE_LETTERS, Modifier::TripleLetter))
+        .chain(map(DOUBLE_LETTERS, Modifier::DoubleLetter));
+
+    HashMap::from_iter(iter)
+});
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Board([[Option<Tile>; 15]; 15]);
 
-impl Index<usize> for Board {
-    type Output = [Option<Tile>; 15];
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+impl Board {
+    pub fn validate_and_score_move(m: &Move) -> Result<u32, InvalidMoveReason> {
+        // TODO
+        Ok(0)
     }
 }
 
-impl IndexMut<usize> for Board {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
-    }
+#[derive(Copy, Clone, Debug)]
+pub enum InvalidMoveReason {
+    Disconnected,
+    NotAWord,
 }
 
-impl Display for Board {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "#################")?;
-        for i in 0..15 {
-            write!(f, "#")?;
-            for j in 0..15 {
-                match self[i][j] {
-                    Some(t) => write!(f, "{t}")?,
-                    None => write!(f, " ")?,
-                }
-            }
-            writeln!(f, "#")?;
-        }
-        write!(f, "#################")?;
-        Ok(())
-    }
+/// An attempt to play a word which may or may not be valid
+#[derive(Debug, Clone)]
+pub struct Move {
+    letters: Vec<Tile>,
+    start: Point,
+    direction: Direction,
 }
 
-#[derive(Default, Clone, Debug)]
+/// An Nx1 or 1xN rectangle on the board
+#[derive(Debug, Clone, Copy)]
+pub struct BoardRegion {
+    length: usize,
+    start: Point,
+    direction: Direction,
+}
+
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 struct Player {
     tiles: Vec<Tile>,
     score: u32,
 }
 
-#[derive(Clone, Debug)]
-struct Game {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Game {
     board: Board,
     tile_bag: Vec<Tile>,
     players: Vec<Player>,
@@ -145,22 +184,39 @@ struct Game {
 }
 
 impl Game {
-    fn new(num_players: u8, randomize: bool) -> Self {
+    pub fn new(num_players: usize) -> Self {
         assert!(num_players > 1 && num_players <= 4);
 
-        let mut tile_bag = Vec::from_iter(Tile::iter_game_count());
-        if randomize {
-            tile_bag.shuffle(&mut rand::thread_rng());
-        } else {
-            tile_bag.shuffle(&mut rand::rngs::mock::StepRng::new(0, 1));
-        }
-
-        Self {
+        let mut game = Game {
             players: vec![Player::default(); num_players as usize],
             board: Board::default(),
-            tile_bag,
+            tile_bag: Tile::iter_game_count().collect(),
             whose_turn: 0,
+        };
+
+        game.mix_tile_bag();
+        for i in 0..num_players {
+            game.refill_player_tiles(i);
         }
+
+        game
+    }
+
+    fn mix_tile_bag(&mut self) {
+        use rand::seq::SliceRandom;
+        self.tile_bag.shuffle(&mut rand::thread_rng());
+    }
+
+    fn refill_player_tiles(&mut self, player_i: usize) {
+        let player = &mut self.players[player_i];
+        while player.tiles.len() < 7 && !self.tile_bag.is_empty() {
+            player.tiles.push(self.tile_bag.pop().unwrap());
+        }
+    }
+
+    /// TODO: allow players to decide the game is over because nobody can make a move
+    fn game_finished_by_tiles(&self) -> bool {
+        self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
     }
 
     pub fn whose_turn(&self) -> u8 {
@@ -168,42 +224,30 @@ impl Game {
     }
 }
 
-impl Display for Game {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn tiles_str(ts: &[Tile]) -> String {
-            ts.iter().map(Tile::to_string).collect::<Vec<_>>().join(" ")
-        }
-        writeln!(f, "{}", self.board)?;
-        for (n, p) in self.players.iter().enumerate() {
-            let tiles = tiles_str(&p.tiles);
-            writeln!(f, "Player {n} | {} points | [{}]", p.score, tiles)?;
-        }
-        writeln!(f, "It is player {}'s turn", self.whose_turn)?;
-        writeln!(f, "Remaining tiles: {}", tiles_str(&self.tile_bag))?;
-        Ok(())
-    }
-}
+pub static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
+    let f = File::open(path).unwrap();
+    let rdr = BufReader::new(f);
+    let mut words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
 
-static WORDLIST: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    // This should be O(n) because the word list is already sorted, but just in case
+    // there is an error somewhere.
+    words.sort_unstable();
 
-pub fn load_wordlist() -> io::Result<()> {
-    let mut wl = WORDLIST.lock().unwrap();
-    if wl.is_empty() {
-        let f = File::open("words.txt").or_else(|_| File::open("game-logic/words.txt"))?;
-        let rdr = BufReader::new(f);
-        let mut words = rdr.lines().collect::<io::Result<Vec<String>>>()?;
-
-        // This should be O(n) because the word list is already sorted, but just in case
-        // there is an error somewhere.
-        words.sort_unstable();
-        *wl = words;
-    }
-
-    Ok(())
-}
+    words
+});
 
 pub fn is_word(s: &String) -> bool {
-    load_wordlist().unwarp();
-    let wl = WORDLIST.lock().unwrap();
-    wl.binary_search(s).is_ok()
+    WORDLIST.binary_search(s).is_ok()
+}
+
+#[test]
+fn known_game_constants() {
+    assert_eq!(Tile::iter_game_count().count(), 100);
+    assert_eq!(
+        Tile::iter_game_count().map(Tile::point_value).sum::<u32>(),
+        187
+    );
+    assert_eq!(Board::default().0.len(), 15);
+    assert_eq!(Board::default()[0].len(), 15);
 }
