@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use game_logic::{Board, Game, Modifier, Tile};
 
 fn main() {
@@ -30,4 +32,11 @@ fn main() {
         }
         println!()
     }
+
+    println!("Modifiers as json:");
+    let mods_as_str = game_logic::MODIFIERS
+        .iter()
+        .map(|((x, y), m)| (format!("{x},{y}"), *m))
+        .collect::<HashMap<_, _>>();
+    println!("{}", serde_json::to_string_pretty(&mods_as_str).unwrap());
 }

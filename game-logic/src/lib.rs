@@ -84,7 +84,7 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Modifier {
     DoubleLetter,
     TripleLetter,

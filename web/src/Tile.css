@@ -1,0 +1,42 @@
+.tile {
+  margin: 1px;
+  position: relative;
+  width: 3em;
+  height: 3em;
+  font-family: "Noto Sans", sans-serif;
+}
+
+.tile-background {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+}
+
+.tile-letter {
+  position: absolute;
+  z-index: 101;
+  margin: 0;
+  top: 12%;
+  left: 35%;
+  font-size: 1.6em;
+}
+
+.tile-point-value {
+  position: absolute;
+  z-index: 101;
+  margin: 0;
+  right: 2%;
+  bottom: -5%;
+}
+
+.tile-selectable:hover {
+  transition: 0.05s;
+  filter: hue-rotate(-90deg) drop-shadow(0 0 0.3em #fff);
+}
+
+.tile-selected {
+  /* box-sizing: border-box; */
+  /* border: 2px solid red; */
+  filter: hue-rotate(-90deg);
+}
