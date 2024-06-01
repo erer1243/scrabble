@@ -1,7 +1,6 @@
 use std::{
     net::SocketAddr,
     sync::{atomic::AtomicUsize, Arc},
-    time::Duration,
 };
 
 use axum::{
@@ -19,7 +18,6 @@ use tokio::{
     net::TcpListener,
     sync::{Mutex, Notify},
     task,
-    time::sleep,
 };
 
 type Global = Arc<GlobalState>;
@@ -38,20 +36,17 @@ async fn main() {
 
     let g = global.clone();
     task::spawn(async move {
-        loop {
-            sleep(Duration::from_secs(1)).await;
-            let mut game = Game::new(2);
-            for _ in 0..50 {
-                let (x, y, t): (usize, usize, u8) = rand::random();
-                game.board[x % 15][y % 15] = game::Tile::from_u8(t % 26);
-            }
-
-            let mut tbl = g.table.lock().await;
-            tbl.game = game;
-            drop(tbl);
-
-            g.notify.notify_waiters();
+        let mut game = Game::new(2);
+        for _ in 0..50 {
+            let (x, y, t): (usize, usize, u8) = rand::random();
+            game.board[x % 15][y % 15] = game::Tile::from_u8(t % 27);
         }
+
+        let mut tbl = g.table.lock().await;
+        tbl.game = game;
+        drop(tbl);
+
+        g.notify.notify_waiters();
     });
 
     let g = global.clone();
@@ -78,15 +73,41 @@ async fn handle_socket(mut sock: WebSocket, addr: SocketAddr, g: Global) {
     let cid = count();
     println!("[{cid}] Connection from {addr}");
 
+    macro_rules! send_update {
+        () => {{
+            let tbl = g.table.lock().await;
+            let svr_msg = ServerMessage::Update { table: &*tbl };
+            let json = serde_json::to_string(&svr_msg).unwrap();
+            drop(tbl);
+            sock.send(Message::Text(json)).await
+        }};
+    }
+
+    send_update!().unwrap();
+
     loop {
-        g.notify.notified().await;
-        let tbl = g.table.lock().await;
+        tokio::select! {
+            opt_res_msg = sock.recv() => { match opt_res_msg {
+                Some(Ok(msg)) => handle_ws_msg(msg, cid, &mut sock, g.clone()).await,
+                Some(Err(e)) => println!("[{cid}] Error: {e:?}"),
+                None => { println!("[{cid}] Disconnected"); break }
+            } }
 
-        let svr_msg = ServerMessage::Update { table: &*tbl };
-        let json = serde_json::to_string(&svr_msg).unwrap();
-        drop(tbl);
+            _ = g.notify.notified() => {
+                send_update!().unwrap();
+            }
+        }
+    }
+}
 
-        sock.send(Message::Text(json)).await.unwrap();
+async fn handle_ws_msg(ws_msg: Message, cid: usize, sock: &mut WebSocket, g: Global) {
+    println!("[{cid}] {ws_msg:#?}");
+    match ws_msg {
+        Message::Text(data) => {
+            let client_msg: ClientMessage = serde_json::from_str(&data).unwrap();
+            println!("[{cid}]")
+        }
+        _ => (),
     }
 }
 
@@ -102,7 +123,7 @@ enum ServerMessage<'a> {
 
 #[derive(Debug, Clone, Deserialize)]
 enum ClientMessage {
-    JoinTable { id: String },
+    JoinTable { _id: String },
 }
 
 /// An instance of a running game

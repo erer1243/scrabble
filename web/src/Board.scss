@@ -1,7 +1,6 @@
 @use 'Tile' as tile;
 
 .board {
-  border: 1px dashed red;
   background-color: lightgoldenrodyellow;
   width: fit-content;
 }
@@ -12,7 +11,7 @@
 
 .board-square {
   @include tile.tile-sized;
-  border: 1px solid brown;
+  border: 1.5px solid brown;
 }
 
 .empty-square {

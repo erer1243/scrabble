@@ -1,0 +1,22 @@
+.game-view {
+  /* background-color: red; */
+  width: fit-content;
+}
+
+.game-view-tile-bar {
+  display: flex;
+  width: 100%;
+  place-content: center;
+}
+
+.game-view-tile-bar-label {
+  height: 0;
+  width: 0;
+  margin: 0;
+  transform: translate(-5.5em, 0.35em);
+
+  color: white;
+  font-family: "Noto sans";
+  font-weight: 400;
+  white-space: nowrap;
+}

@@ -13,23 +13,29 @@ const statuses = {
   [ReadyState.UNINSTANTIATED]: 'uninstantiated',
 }
 
-const App = () => {
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, {
-    reconnectAttempts: 20,
-    reconnectInterval: 5000, // ms
-    shouldReconnect: () => true,
-  });
+const sockOptions = {
+  reconnectAttempts: 20,
+  reconnectInterval: 5000, // ms
+  shouldReconnect: () => true,
+}
 
+const showDebugInfoByDefault = true;
+
+const App = () => {
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, sockOptions);
   const [table, setTable] = useState<TableT | undefined>(undefined);
-  void ([table, setTable, sendJsonMessage]);
 
   useEffect(() => {
     if (lastJsonMessage) {
-      // console.log(lastJsonMessage)
       const serverMessage = lastJsonMessage as ServerMessageT;
       setTable(serverMessage.Update.table);
     }
   }, [lastJsonMessage])
+
+  useEffect(() => {
+    if (readyState !== ReadyState.OPEN)
+      setTable(undefined);
+  }, [readyState])
 
   let gameView = undefined;
   if (table) {
@@ -41,8 +47,25 @@ const App = () => {
   return (
     <>
       {gameView}
-      <h1 style={{ "color": "white" }}>Socket is {statuses[readyState]}</h1>
-      <pre style={{ "color": "white" }}>{JSON.stringify(lastJsonMessage, null, 1)}</pre>
+      <DebugInfo data={[`Socket is ${statuses[readyState]}`, lastJsonMessage]} />
+    </>
+  )
+}
+
+const DebugInfo = ({ data }: { data: any[] }) => {
+  const [show, setShow] = useState(showDebugInfoByDefault);
+  const white = { color: "white" }
+
+  let list;
+  if (show) {
+    const listItems = data.map((val, i) => <li key={i} style={white}><pre style={white}>{JSON.stringify(val, null, 2)}</pre></li>);
+    list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
+  }
+
+  return (
+    <>
+      <button onClick={() => setShow(!show)}>toggle debug info</button>
+      {list}
     </>
   )
 }
