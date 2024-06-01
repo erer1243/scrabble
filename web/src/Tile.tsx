@@ -1,22 +1,19 @@
-import "./Tile.css";
+import "./Tile.scss";
 import background from "./assets/tile/background.png";
 import { TileT, tileValues } from "./game";
 
-export type TileAttributes = {
+export type TileProps = {
   tile: TileT,
   pointValue?: number,
-  selectable?: boolean,
-  selected?: boolean,
 };
 
-export const Tile = ({ tile: letter, pointValue, selectable, selected }: TileAttributes) => {
-  letter = letter.toUpperCase() as TileT;
-  pointValue = pointValue ?? tileValues[letter];
-  let className = `tile ${selectable ? "tile-selectable" : ""} ${selected ? "tile-selected" : ""}`
-
+export const Tile = ({ tile, pointValue }: TileProps) => {
+  pointValue ??= tileValues[tile];
+  const tileLetter = (tile == "Blank") ? "" : tile as string;
+  
   return (
-    <div className={className}>
-      <p className="tile-letter">{letter}</p>
+    <div className="tile">
+      <p className="tile-letter">{tileLetter}</p>
       <p className="tile-point-value">{pointValue}</p>
       <img className="tile-background" draggable="false" src={background} />
     </div>

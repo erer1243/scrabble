@@ -1,31 +1,56 @@
 import { Tile } from "./Tile";
-import { BoardT, modifiers, newBoard } from "./game"
-import "./Tile.css"
+import { BoardT, modifiers } from "./game"
+import "./Board.scss"
 
-export type BoardAttributes = {
+export type BoardProps = {
   board: BoardT,
+  onClickSquare: (x: number, y: number) => void,
 }
 
-export const Board = ({ board }: BoardAttributes) => {
-  let tileElemBoard: BoardT<React.JSX.Element | undefined> = newBoard();
-
+export const Board = ({ board, onClickSquare }: BoardProps) => {
+  const rows: Array<React.JSX.Element> = [];
   for (let x = 0; x < 15; x++) {
+    const rowSquares: Array<React.JSX.Element> = [];
     for (let y = 0; y < 15; y++) {
-      let tile = board[x][y];
+      const tile = board[x][y]
+      const modifier = modifiers[x][y]
+
       let elem;
       if (tile) {
         elem = <Tile tile={tile} />
-      } else if (modifiers[x][y]) {
-        elem = <div className="tile" style={{"backgroundColor": "red"}}></div>
+      } else if (modifier) {
+        const [modifierText, modifierClassName] = {
+          "DoubleLetter": ["Double Letter Score", "double-letter"],
+          "TripleLetter": ["Triple Letter Score", "triple-letter"],
+          "DoubleWord": ["Double Word Score", "double-word"],
+          "TripleWord": ["Triple Word Score", "triple-word"],
+        }[modifier]
+        elem = (
+          <div className={`empty-square modifier-square ${modifierClassName}`}>
+            <p className="modifier-text">{modifierText}</p>
+          </div>
+        )
       } else {
-        elem = <div className="tile" style={{"backgroundColor": "green"}}></div>
+        elem = <div className="empty-square"></div>
       }
 
-      elem.props["key"] =`${x},${y}` 
-
-      tileElemBoard[x][y] = elem;
+      rowSquares[y] = (
+        <div className="board-square" onClick={() => onClickSquare(x, y)} key={`board-square-${y}`}>
+          {elem}
+        </div>
+      )
     }
+
+    rows[x] = (
+      <div className="board-row" key={`row-${x}`}>
+        {rowSquares}
+      </div>
+    )
   }
 
-  return tileElemBoard[0]
+  return (
+    <div className="board">
+      {rows}
+    </div>
+  )
 }

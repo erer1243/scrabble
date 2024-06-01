@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.37.0", features = ["full"] }
-tokio-tungstenite = "0.21.0"
-game-logic = { path = "../game-logic" }
+game = { path = "../game" }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
+axum = { version = "0.7.5", features = ["ws"] }
+futures = "0.3.30"
+rand = "0.8.5"

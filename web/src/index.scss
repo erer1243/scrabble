@@ -1,14 +1,16 @@
 body {
-  margin: 0;
+  /* margin: 0; */
   background-color: #242424;
-  display: flex;
-  place-items: center;
-  justify-content: center;
+  /* display: flex; */
+  /* place-items: center; */
+  /* justify-content: center; */
   min-width: 320px;
-  min-height: 100vh;
+  /* min-height: 100vh; */
 
   -webkit-user-select: none;
   user-select: none;
+
+  scale: 100%;
 }
 
 /*

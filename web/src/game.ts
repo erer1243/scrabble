@@ -1,21 +1,38 @@
+export type OptionT<T> = T | null;
 export type TileT = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
   | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'Blank'
 export type ModifierT = "DoubleLetter" | "TripleLetter" | "DoubleWord" | "TripleWord"
-export type BoardT<T = TileT> = Array<Array<T | undefined>>
-
-export const newBoard = <T>(): BoardT<T> => {
-  return Array.from({ length: 15 }, () => new Array(15).fill(undefined));
+export type DirectionT = "Right" | "Down"
+export type PointT = [number, number];
+export type BoardT = Array<Array<OptionT<TileT>>> // 15x15
+export type InvalidMoveReasonT = "Disconnected" | "NotAWord" | { "Impossible": string }
+export type MoveT = {
+  letters: Array<TileT>,
+  start: PointT,
+  direction: DirectionT,
+}
+export type PlayerT = {
+  tiles: Array<TileT>,
+  score: number,
+  name: string,
+}
+export type GameT = {
+  board: BoardT,
+  tile_bag: Array<TileT>,
+  players: Array<PlayerT>,
+  whose_turn: number,
 }
 
+// Constants from the game
 export const tileValues: Record<TileT, number> = {
   'A': 1, 'E': 1, 'I': 1, 'O': 1, 'U': 1, 'L': 1, 'N': 1, 'S': 1, 'T': 1, 'R': 1,
   'D': 2, 'G': 2, 'B': 3, 'C': 3, 'M': 3, 'P': 3, 'F': 4, 'H': 4, 'V': 4, 'W': 4,
   'Y': 4, 'K': 5, 'J': 8, 'X': 8, 'Q': 10, 'Z': 10, 'Blank': 0,
 }
 
-// Does NOT include center
-export const modifiers: BoardT<ModifierT | undefined> = (() => {
+export const modifiers: Array<Array<ModifierT | undefined>> = (() => {
   const modifierMap: Record<string, ModifierT> = {
+    "7,7": "DoubleLetter",
     "2,8": "DoubleLetter",
     "0,0": "TripleWord",
     "6,2": "DoubleLetter",
@@ -78,9 +95,12 @@ export const modifiers: BoardT<ModifierT | undefined> = (() => {
     "12,12": "DoubleWord"
   }
 
-  let board: BoardT<ModifierT | undefined> = newBoard();
-  for (let x = 0; x < 15; x++)
-    for (let y = 0; y < 15; y++)
+  const board: Array<Array<ModifierT | undefined>> = [];
+  for (let x = 0; x < 15; x++) {
+    board[x] = [];
+    for (let y = 0; y < 15; y++) {
       board[x][y] = modifierMap[`${x},${y}`];
+    }
+  }
   return board;
 })()

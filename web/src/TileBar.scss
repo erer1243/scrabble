@@ -1,0 +1,15 @@
+.tile-bar {
+  border: 3px solid white;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.tile-bar-tile {
+  margin: 1px;
+  float: left;
+}
+
+.tile-bar-tile .tile:hover {
+  transition: 0.05s;
+  filter: hue-rotate(-90deg) drop-shadow(0 0 0.3em #fff);
+}

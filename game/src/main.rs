@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
-use game_logic::{Board, Game, Modifier, Tile};
+use game::{Board, Game, Modifier, Tile, MODIFIERS};
 
 fn main() {
-    println!("Empty board:\n{}", game_logic::Board::default());
+    println!("Empty board:\n{}", Board::default());
 
     print!("All the tiles: ");
-    game_logic::Tile::iter_game_count().for_each(|t| print!("{t}"));
+    Tile::iter_game_count().for_each(|t| print!("{t}"));
     println!();
 
     let mut board = Board::default();
@@ -21,7 +19,7 @@ fn main() {
     println!("Modifiers on a board:");
     for x in 0..15usize {
         for y in 0..15usize {
-            let c = match game_logic::MODIFIERS.get(&(x, y)) {
+            let c = match MODIFIERS.get(&(x, y)) {
                 Some(Modifier::DoubleLetter) => 'd',
                 Some(Modifier::TripleLetter) => 't',
                 Some(Modifier::DoubleWord) => 'D',
@@ -32,11 +30,4 @@ fn main() {
         }
         println!()
     }
-
-    println!("Modifiers as json:");
-    let mods_as_str = game_logic::MODIFIERS
-        .iter()
-        .map(|((x, y), m)| (format!("{x},{y}"), *m))
-        .collect::<HashMap<_, _>>();
-    println!("{}", serde_json::to_string_pretty(&mods_as_str).unwrap());
 }

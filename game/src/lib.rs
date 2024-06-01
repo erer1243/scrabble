@@ -1,4 +1,4 @@
-// #![allow(unused)]
+#![allow(dead_code)]
 
 //! Sources:
 //! - <https://hasbro-new.custhelp.com/app/answers/detail/a_id/55/~/what-is-the-total-face-value-of-all-the-scrabble-tiles%3F>
@@ -8,9 +8,11 @@
 //! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
 mod std_impls;
+mod types;
+
+pub use types::*;
 
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::File,
@@ -18,16 +20,10 @@ use std::{
     path::Path,
 };
 
-#[rustfmt::skip]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum Tile {
-    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank,
-}
-
 impl Tile {
-    fn from_u8(n: u8) -> Option<Self> {
-        if n <= 26 {
+    pub fn from_u8(n: u8) -> Option<Self> {
+        // 26 letters + blank = 27
+        if n < 27 {
             unsafe { Some(std::mem::transmute(n)) }
         } else {
             None
@@ -84,22 +80,6 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Modifier {
-    DoubleLetter,
-    TripleLetter,
-    DoubleWord,
-    TripleWord,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Direction {
-    Right,
-    Down,
-}
-
-pub type Point = (usize, usize);
-
 /// Includes the center as a double word modifier.
 pub static MODIFIERS: Lazy<HashMap<Point, Modifier>> = Lazy::new(|| {
     type Points = &'static [Point];
@@ -126,7 +106,7 @@ pub static MODIFIERS: Lazy<HashMap<Point, Modifier>> = Lazy::new(|| {
     ];
 
     fn map(ps: Points, m: Modifier) -> impl Iterator<Item = ((usize, usize), Modifier)> {
-        ps.iter().map(move |&p| (p, m))
+        ps.iter().map(move |p| (*p, m))
     }
 
     let iter = map(TRIPLE_WORDS, Modifier::TripleWord)
@@ -137,50 +117,12 @@ pub static MODIFIERS: Lazy<HashMap<Point, Modifier>> = Lazy::new(|| {
     HashMap::from_iter(iter)
 });
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct Board([[Option<Tile>; 15]; 15]);
-
 impl Board {
     pub fn validate_and_score_move(m: &Move) -> Result<u32, InvalidMoveReason> {
+        _ = m;
         // TODO
         Ok(0)
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum InvalidMoveReason {
-    Disconnected,
-    NotAWord,
-}
-
-/// An attempt to play a word which may or may not be valid
-#[derive(Debug, Clone)]
-pub struct Move {
-    letters: Vec<Tile>,
-    start: Point,
-    direction: Direction,
-}
-
-/// An Nx1 or 1xN rectangle on the board
-#[derive(Debug, Clone, Copy)]
-pub struct BoardRegion {
-    length: usize,
-    start: Point,
-    direction: Direction,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
-struct Player {
-    tiles: Vec<Tile>,
-    score: u32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Game {
-    board: Board,
-    tile_bag: Vec<Tile>,
-    players: Vec<Player>,
-    whose_turn: u8,
 }
 
 impl Game {
@@ -197,9 +139,14 @@ impl Game {
         game.mix_tile_bag();
         for i in 0..num_players {
             game.refill_player_tiles(i);
+            game.set_player_name(i, format!("Player {}", i + 1));
         }
 
         game
+    }
+
+    pub fn set_player_name(&mut self, player_index: usize, name: String) {
+        self.players[player_index].name = name;
     }
 
     fn mix_tile_bag(&mut self) {
@@ -214,13 +161,8 @@ impl Game {
         }
     }
 
-    /// TODO: allow players to decide the game is over because nobody can make a move
     fn game_finished_by_tiles(&self) -> bool {
         self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
-    }
-
-    pub fn whose_turn(&self) -> u8 {
-        self.whose_turn
     }
 }
 

@@ -1,9 +1,0 @@
-.tile-bar {
-  border: 3px solid white;
-  border-radius: 2px;
-  display: inline-block;
-}
-
-.tile-bar-tile {
-  float: left;
-}

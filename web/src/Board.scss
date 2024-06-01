@@ -1,0 +1,52 @@
+@use 'Tile' as tile;
+
+.board {
+  border: 1px dashed red;
+  background-color: lightgoldenrodyellow;
+  width: fit-content;
+}
+
+.board-row {
+  display: flex;
+}
+
+.board-square {
+  @include tile.tile-sized;
+  border: 1px solid brown;
+}
+
+.empty-square {
+  width: 100%;
+  height: 100%;
+}
+
+.modifier-square {
+  display: flex;
+  text-align: center;
+  place-items: center;
+
+}
+
+.modifier-text {
+  margin: 0;
+  overflow-wrap: break-word;
+  font-size: 0.7em;
+  font-weight: 500;
+  line-height: 1em;
+}
+
+.double-word {
+  background-color: pink;
+}
+
+.triple-word {
+  background-color: red;
+}
+
+.double-letter {
+  background-color: deepskyblue;
+}
+
+.triple-letter {
+  background-color: aqua;
+}
