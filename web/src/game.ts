@@ -1,21 +1,32 @@
+
 export type OptionT<T> = T | null;
+
 export type TileT = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
   | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'Blank'
+
 export type ModifierT = "DoubleLetter" | "TripleLetter" | "DoubleWord" | "TripleWord"
+
 export type DirectionT = "Right" | "Down"
+
 export type PointT = [number, number];
-export type BoardT = Array<Array<OptionT<TileT>>> // 15x15
+
+type Array15<T> = [T, T, T, T, T, T, T, T, T, T, T, T, T, T, T]
+export type BoardT = Array15<Array15<OptionT<TileT>>>
+
 export type InvalidMoveReasonT = "Disconnected" | "NotAWord" | { "Impossible": string }
+
 export type MoveT = {
-  letters: Array<TileT>,
+  tiles: Array<TileT>,
   start: PointT,
   direction: DirectionT,
 }
+
 export type PlayerT = {
   tiles: Array<TileT>,
   score: number,
   name: string,
 }
+
 export type GameT = {
   board: BoardT,
   tile_bag: Array<TileT>,

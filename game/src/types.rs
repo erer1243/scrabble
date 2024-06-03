@@ -36,7 +36,7 @@ pub enum InvalidMoveReason {
 /// An attempt to play a word which may or may not be valid
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Move {
-    pub letters: Vec<Tile>,
+    pub tiles: Vec<Tile>,
     pub start: Point,
     pub direction: Direction,
 }
@@ -51,7 +51,6 @@ pub struct Move {
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Player {
-    pub name: String,
     pub tiles: Vec<Tile>,
     pub score: u32,
 }

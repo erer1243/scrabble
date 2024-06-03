@@ -3,6 +3,7 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
+use anyhow::{bail, Result};
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -12,7 +13,7 @@ use axum::{
     routing::get,
     Router,
 };
-use game::Game;
+use game::{Board, Game};
 use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpListener,
@@ -30,7 +31,7 @@ struct GlobalState {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let global = Arc::new(GlobalState {
-        table: Mutex::new(Table { game: Game::new(2) }),
+        table: Mutex::new(Table::new(2)),
         notify: Notify::new(),
     });
 
@@ -65,49 +66,40 @@ async fn handle_connection(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     g: Global,
 ) -> impl IntoResponse {
-    println!("Connection from {addr:?}");
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, g))
+    ws.on_upgrade(move |sock| ConnectionHandler::handle_socket(sock, g, addr))
 }
 
-async fn handle_socket(mut sock: WebSocket, addr: SocketAddr, g: Global) {
-    let cid = count();
-    println!("[{cid}] Connection from {addr}");
-
-    macro_rules! send_update {
-        () => {{
-            let tbl = g.table.lock().await;
-            let svr_msg = ServerMessage::Update { table: &*tbl };
-            let json = serde_json::to_string(&svr_msg).unwrap();
-            drop(tbl);
-            sock.send(Message::Text(json)).await
-        }};
-    }
-
-    send_update!().unwrap();
-
-    loop {
-        tokio::select! {
-            opt_res_msg = sock.recv() => { match opt_res_msg {
-                Some(Ok(msg)) => handle_ws_msg(msg, cid, &mut sock, g.clone()).await,
-                Some(Err(e)) => println!("[{cid}] Error: {e:?}"),
-                None => { println!("[{cid}] Disconnected"); break }
-            } }
-
-            _ = g.notify.notified() => {
-                send_update!().unwrap();
-            }
-        }
-    }
+struct ConnectionHandler {
+    ws: WebSocket,
+    g: Global,
+    addr: SocketAddr,
+    cid: usize,
 }
 
-async fn handle_ws_msg(ws_msg: Message, cid: usize, sock: &mut WebSocket, g: Global) {
-    println!("[{cid}] {ws_msg:#?}");
-    match ws_msg {
-        Message::Text(data) => {
-            let client_msg: ClientMessage = serde_json::from_str(&data).unwrap();
-            println!("[{cid}]")
+impl ConnectionHandler {
+    async fn handle_socket(ws: WebSocket, g: Global, addr: SocketAddr) {
+        let mut handler = ConnectionHandler {
+            ws,
+            g,
+            addr,
+            cid: count(),
+        };
+
+        if let Err(e) = handler.go().await {
+            println!("[{}] Error: {}", handler.cid, e);
         }
-        _ => (),
+    }
+
+    async fn go(&mut self) -> Result<()> {
+        println!("[{}] Connection from {}", self.cid, self.addr);
+        let tbl = self.g.table.lock().await;
+        self.ws
+            .send_msg(ServerMessage::TableInfo { table: &*tbl })
+            .await?;
+        drop(tbl);
+        loop {
+            self.ws.recv_message().await?;
+        }
     }
 }
 
@@ -116,18 +108,66 @@ fn count() -> usize {
     COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-#[derive(Debug, Clone, Serialize)]
-enum ServerMessage<'a> {
-    Update { table: &'a Table },
-}
-
-#[derive(Debug, Clone, Deserialize)]
-enum ClientMessage {
-    JoinTable { _id: String },
-}
-
 /// An instance of a running game
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Table {
     game: Game,
+    players: Vec<String>,
+}
+
+impl Table {
+    fn new(num_players: usize) -> Self {
+        Self {
+            game: Game::new(num_players),
+            players: (1..=num_players).map(|n| format!("Player {n}")).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+enum ServerMessage<'a> {
+    TableInfo { table: &'a Table },
+    Update { board: &'a Board },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+enum ClientMessage {
+    JoinTable {
+        table: String,
+        as_player_index: usize,
+    },
+    GetTableInfo {
+        table: String,
+    },
+}
+
+#[extend::ext]
+impl WebSocket {
+    async fn recv_message(&mut self) -> Result<ClientMessage> {
+        loop {
+            let msg = match self.recv().await {
+                Some(Ok(m)) => m,
+                Some(Err(e)) => bail!(e),
+                None => bail!("Client already disconnected"),
+            };
+            match msg {
+                Message::Text(json) => return Ok(serde_json::from_str(&json)?),
+                Message::Close(frame) => bail!("Close frame received: {frame:?}"),
+                Message::Binary(_) => bail!("Received binary message"),
+                Message::Ping(data) => self.pong(data).await?,
+                Message::Pong(_) => {}
+            }
+        }
+    }
+
+    async fn send_msg(&mut self, msg: ServerMessage<'_>) -> Result<()> {
+        self.send(Message::Text(serde_json::to_string(&msg)?))
+            .await?;
+        Ok(())
+    }
+
+    async fn pong(&mut self, data: Vec<u8>) -> Result<()> {
+        self.send(Message::Pong(data)).await?;
+        Ok(())
+    }
 }

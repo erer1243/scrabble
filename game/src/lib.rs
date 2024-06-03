@@ -139,14 +139,9 @@ impl Game {
         game.mix_tile_bag();
         for i in 0..num_players {
             game.refill_player_tiles(i);
-            game.set_player_name(i, format!("Player {}", i + 1));
         }
 
         game
-    }
-
-    pub fn set_player_name(&mut self, player_index: usize, name: String) {
-        self.players[player_index].name = name;
     }
 
     fn mix_tile_bag(&mut self) {

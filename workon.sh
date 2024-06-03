@@ -1,8 +1,8 @@
 #!/bin/sh -xe
 cd "$(dirname "$0")"
-(cd web && npm run dev -- --host) &
+(cd web && npm run dev -- --host >/dev/null 2>&1) &
 NPM="$!"
-cargo watch --exec run --ignore web &
+cargo watch --exec run --ignore web --clear &
 CARGO="$!"
-trap 'kill $NPM $CARGO' EXIT INT
+trap '{ pkill -f target/debug/server; kill $NPM $CARGO; } >/dev/null 2>&1' EXIT INT
 wait

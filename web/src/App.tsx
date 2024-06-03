@@ -19,25 +19,29 @@ const sockOptions = {
   shouldReconnect: () => true,
 }
 
-const showDebugInfoByDefault = true;
+const showDebugInfoByDefault = true
 
 const App = () => {
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, sockOptions);
-  const [table, setTable] = useState<TableT | undefined>(undefined);
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, sockOptions)
+  const [table, setTable] = useState<TableT | undefined>(undefined)
 
   useEffect(() => {
     if (lastJsonMessage) {
-      const serverMessage = lastJsonMessage as ServerMessageT;
-      setTable(serverMessage.Update.table);
+      const serverMessage = lastJsonMessage as ServerMessageT
+      if ('TableInfo' in serverMessage)
+        setTable(serverMessage.TableInfo.table)
     }
   }, [lastJsonMessage])
 
   useEffect(() => {
-    if (readyState !== ReadyState.OPEN)
-      setTable(undefined);
+    if (readyState === ReadyState.OPEN) {
+      sendJsonMessage({ GetTableInfo: { table: "xxx" }})
+    } else {
+      setTable(undefined)
+    }
   }, [readyState])
 
-  let gameView = undefined;
+  let gameView = undefined
   if (table) {
     gameView = (
       <GameView game={table.game} playerIndex={0} />
@@ -53,12 +57,12 @@ const App = () => {
 }
 
 const DebugInfo = ({ data }: { data: any[] }) => {
-  const [show, setShow] = useState(showDebugInfoByDefault);
+  const [show, setShow] = useState(showDebugInfoByDefault)
   const white = { color: "white" }
 
-  let list;
+  let list
   if (show) {
-    const listItems = data.map((val, i) => <li key={i} style={white}><pre style={white}>{JSON.stringify(val, null, 2)}</pre></li>);
+    const listItems = data.map((val, i) => <li key={i} style={white}><pre style={white}>{JSON.stringify(val, null, 2)}</pre></li>)
     list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
   }
 

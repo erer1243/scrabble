@@ -8,14 +8,13 @@ export type TileBarProps = {
   selectedTile: number | undefined,
 }
 
+// XXX: Key being the index of the letter is apparently buggy and wrong?
+// https://react.dev/learn/rendering-lists#why-does-react-need-keys
 export const TileBar = ({ tiles, onClickTile, selectedTile }: TileBarProps) => {
-  // XXX: Key being the index of the letter is apparently buggy and wrong?
-  // https://react.dev/learn/rendering-lists#why-does-react-need-keys
   const tileElems = tiles.map((l, i) => {
-    const un = (selectedTile != i) ? "un" : "";
-    const className = `tile-bar-tile tile-bar-tile-${un}selected`
+    const selectedClass = (selectedTile === i) ? "tile-bar-tile-selected" : "tile-bar-tile-unselected"
     return (
-      <div className={className} onClick={() => onClickTile(i)} key={i}>
+      <div className={`tile-bar-tile ${selectedClass}`} onClick={() => onClickTile(i)} key={i}>
         <Tile tile={l} />
       </div>
     )

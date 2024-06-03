@@ -4,7 +4,7 @@ import "./Board.scss"
 
 export type BoardProps = {
   board: BoardT,
-  onClickSquare: (x: number, y: number) => void,
+  onClickSquare: (x: number, y: number, isFilled: boolean) => void,
 }
 
 export const Board = ({ board, onClickSquare }: BoardProps) => {
@@ -16,8 +16,10 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
       const modifier = modifiers[x][y]
 
       let elem;
+      let isFilled = false;
       if (tile) {
         elem = <Tile tile={tile} />
+        isFilled = true;
       } else if (modifier) {
         const [modifierText, modifierClassName] = {
           "DoubleLetter": ["Double Letter Score", "double-letter"],
@@ -35,7 +37,7 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
       }
 
       rowSquares[y] = (
-        <div className="board-square" onClick={() => onClickSquare(x, y)} key={`board-square-${y}`}>
+        <div className="board-square" onClick={() => onClickSquare(x, y, isFilled)} key={`board-square-${y}`}>
           {elem}
         </div>
       )
