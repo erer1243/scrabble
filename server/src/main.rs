@@ -23,16 +23,7 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let g = Arc::new(GlobalState {
-        table: RwLock::new(Table::new()),
-        update_send: broadcast::channel(1).0,
-    });
-
-    // let mut table = g.table.write().await;
-    // table.game.add_player("sex haver".to_string());
-    // table.state = GameState::Running;
-    // drop(table);
-
+    let g = Arc::new(GlobalState::new());
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
     axum::serve(
         TcpListener::bind("0.0.0.0:2222").await.unwrap(),

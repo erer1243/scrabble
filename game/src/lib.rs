@@ -8,9 +8,6 @@
 //! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
 mod std_impls;
-mod types;
-
-pub use types::*;
 
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
@@ -18,11 +15,21 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader},
+    ops::Index,
     path::Path,
 };
 
+use serde::{Deserialize, Serialize};
+
+#[rustfmt::skip]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum Tile {
+    A = 0, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank,
+}
+
 impl Tile {
-    pub fn from_u8(n: u8) -> Option<Self> {
+    fn from_u8(n: u8) -> Option<Self> {
         // 26 letters + blank = 27
         if n < 27 {
             unsafe { Some(std::mem::transmute(n)) }
@@ -31,12 +38,16 @@ impl Tile {
         }
     }
 
-    fn as_char(self) -> char {
+    fn as_ascii(self) -> u8 {
         if self == Tile::Blank {
-            '*'
+            b'*'
         } else {
-            char::from(b'A' + self as u8)
+            b'a' + self as u8
         }
+    }
+
+    fn as_char(self) -> char {
+        char::from(self.as_ascii())
     }
 
     fn point_value(self) -> u32 {
@@ -67,7 +78,7 @@ impl Tile {
         }
     }
 
-    pub fn iter_game_count() -> impl Iterator<Item = Tile> {
+    fn iter_game_count() -> impl Iterator<Item = Tile> {
         let mut cur_tile = Tile::A;
         let mut cur_tile_count = cur_tile.number_in_game();
         std::iter::from_fn(move || {
@@ -79,6 +90,31 @@ impl Tile {
             Some(cur_tile)
         })
     }
+}
+
+fn tiles_to_string(tiles: &[Tile]) -> String {
+    tiles.iter().copied().map(Tile::as_char).collect()
+}
+
+/// An attempt to play a word which may or may not be valid
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Move {
+    pub tiles: Vec<(Position, Tile)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InvalidMove {
+    pub explanation: String,
+    pub positions: Vec<Position>,
+}
+
+/// A move that a player previously made, that produced some number of new words on the board
+/// and was worth some number of points.
+#[derive(Clone, Debug, Serialize)]
+pub struct PlayedMove {
+    pub positions: Vec<Position>,
+    pub words: Vec<String>,
+    pub value: u32,
 }
 
 impl Move {
@@ -129,6 +165,19 @@ pub static MODIFIERS: Lazy<HashMap<Position, Modifier>> = Lazy::new(|| {
 
     HashMap::from_iter(iter)
 });
+
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum Modifier {
+    DoubleLetter,
+    TripleLetter,
+    DoubleWord,
+    TripleWord,
+}
+
+pub type Position = (usize, usize);
+
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+pub struct Board(pub [[Option<Tile>; 15]; 15]);
 
 impl Board {
     fn validate_and_score_move(&self, m: &Move) -> Result<PlayedMove, InvalidMove> {
@@ -194,6 +243,13 @@ impl Board {
     }
 }
 
+#[derive(Default, Clone, Debug, Serialize)]
+pub struct Player {
+    pub name: String,
+    pub tiles: Vec<Tile>,
+    pub moves: Vec<PlayedMove>,
+}
+
 impl Player {
     fn has_tiles_to_play_move(&self, m: &Move) -> bool {
         let mut player_tiles_count: HashMap<Tile, u8> = HashMap::new();
@@ -226,6 +282,14 @@ impl Player {
             self.tiles.push(tile_bag.pop().unwrap());
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Game {
+    pub board: Board,
+    pub tile_bag: Vec<Tile>,
+    pub players: Vec<Player>,
+    pub whose_turn: usize,
 }
 
 impl Game {
@@ -280,8 +344,7 @@ impl Game {
     }
 
     pub fn ready_to_play(&self) -> bool {
-        // self.players.len() >= 2
-        true
+        self.players.len() >= 2
     }
 
     pub fn has_player(&self, name: &str) -> bool {
@@ -300,21 +363,174 @@ impl Game {
     }
 }
 
-pub static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
+static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
     let f = File::open(path).unwrap();
     let rdr = BufReader::new(f);
     let mut words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
 
-    // This should be O(n) because the word list is already sorted, but just in case
+    // This should be O(n) because the word list is already sorted, but sort just in case
     // there is an error somewhere.
     words.sort_unstable();
+
+    // I want to be able to assume chars are single lowercase bytes in these strings
+    assert!(words
+        .iter()
+        .all(|w| w.chars().all(|c| c.is_ascii_lowercase())));
 
     words
 });
 
-pub fn is_word(s: &String) -> bool {
-    WORDLIST.binary_search(s).is_ok()
+type Bytes<'a> = &'a [u8];
+
+fn is_word(word: Bytes) -> bool {
+    WORDLIST
+        .binary_search_by(|w| w.as_bytes().cmp(word))
+        .is_ok()
+}
+
+fn solve_multiword(
+    segments: &[Bytes],
+    crossers: &[Option<(Bytes, Bytes)>],
+) -> Option<&'static str> {
+    struct State {}
+
+    let mut buf = Vec::<u8>::with_capacity(16);
+    let mut stk = Vec::<State>::with_capacity(segments.len() - 1);
+
+    // stk.push(b'a');
+
+    None
+}
+
+fn binary_search_for_prefix_range<T, B>(
+    arr: &T,
+    prefix: Bytes,
+    mut l: usize,
+    mut r: usize,
+) -> Option<(usize, usize)>
+where
+    T: Index<usize, Output = B>,
+    B: AsRef<[u8]>,
+{
+    l = binary_search_for_prefix_range_start(arr, prefix, l, r)?;
+    r = binary_search_for_prefix_range_end(arr, prefix, l, r)?;
+    Some((l, r))
+}
+
+fn binary_search_for_prefix_range_start<T, B>(
+    arr: &T,
+    prefix: Bytes,
+    mut l: usize,
+    mut r: usize,
+) -> Option<usize>
+where
+    T: Index<usize, Output = B>,
+    B: AsRef<[u8]>,
+{
+    use std::cmp::Ordering::*;
+
+    while l <= r {
+        let m = (l + r) / 2;
+        let m_word = arr[m].as_ref();
+
+        match m_word.cmp(prefix) {
+            Less => l = m + 1,
+            Greater => {
+                // This check allows the least word that still has the given prefix to satisfy.
+                // Normal binary search is only searching for an exact match to the prefix,
+                // but given ["aa", "bb", "cc"] and "b", we still want to find "bb".
+                if m_word.starts_with(prefix) && (m == 0 || arr[m - 1].as_ref() < prefix) {
+                    return Some(m);
+                }
+
+                // If prefix is less than the entire list, then eventually m = 0 but m_word > prefix,
+                // so this would subtract 1 from 0usize and underflow.
+                r = m.checked_sub(1)?;
+            }
+            Equal => return Some(m),
+        }
+    }
+
+    None
+}
+
+fn binary_search_for_prefix_range_end<T, B>(
+    arr: &T,
+    prefix: Bytes,
+    mut l: usize,
+    mut r: usize,
+) -> Option<usize>
+where
+    T: Index<usize, Output = B>,
+    B: AsRef<[u8]>,
+{
+    use std::cmp::Ordering::*;
+
+    let right_edge = r;
+
+    while l <= r {
+        let m = (l + r) / 2;
+        let m_word = arr[m].as_ref();
+
+        match m_word.cmp(prefix) {
+            Less => l = m + 1,
+            Greater => {
+                if m_word.starts_with(prefix) {
+                    if m == right_edge || !arr[m + 1].as_ref().starts_with(prefix) {
+                        return Some(m);
+                    } else {
+                        l = m + 1;
+                    }
+                } else {
+                    r = m - 1;
+                }
+            }
+            Equal => {
+                if m == right_edge || !arr[m + 1].as_ref().starts_with(prefix) {
+                    return Some(m);
+                } else {
+                    l = m + 1;
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[test]
+fn binary_search_for_prefix_range_test() {
+    let arr = [
+        "aa", "ab", "abb", "ac", "ad", "ba", "bb", "bc", "ca", "cb", "cc",
+    ];
+    let test = |prefix| binary_search_for_prefix_range(&arr, prefix, 0, arr.len() - 1);
+    assert_eq!(test(b"a"), Some((0, 4)));
+    assert_eq!(test(b"ab"), Some((1, 2)));
+    assert_eq!(test(b"abb"), Some((2, 2)));
+    assert_eq!(test(b"aaa"), None);
+    assert_eq!(test(b"x"), None);
+    assert_eq!(test(b"A"), None);
+
+    let test = |prefix| {
+        if let Some((l, r)) =
+            binary_search_for_prefix_range(&*WORDLIST, prefix, 0, WORDLIST.len() - 1)
+        {
+            assert!(!WORDLIST[l - 1].as_bytes().starts_with(prefix));
+            assert!(!WORDLIST[r + 1].as_bytes().starts_with(prefix));
+            println!(
+                "{} => {:?}\n",
+                std::str::from_utf8(prefix).unwrap(),
+                &(&*WORDLIST)[l..=r]
+            );
+        }
+    };
+    test(b"apple");
+    test(b"fuck");
+    test(b"zoo");
+    test(b"onomatopoeia");
+    test(b"this is not a word");
+    test(b"XXXXXXXXXXXXXX");
 }
 
 #[test]
@@ -326,4 +542,9 @@ fn known_game_constants() {
     );
     assert_eq!(Board::default().0.len(), 15);
     assert_eq!(Board::default()[0].len(), 15);
+}
+
+#[test]
+fn wordlist_tests() {
+    once_cell::sync::Lazy::force(&WORDLIST);
 }

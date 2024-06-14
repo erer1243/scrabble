@@ -1,7 +1,3 @@
 [workspace]
 members = ["game", "server"]
 resolver = "2"
-
-[profile.dev]
-debug = false
-strip = true

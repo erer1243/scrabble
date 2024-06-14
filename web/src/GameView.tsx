@@ -70,9 +70,7 @@ export const GameView = ({ game, name, playMove }: GameViewProps) => {
 }
 
 const GameViewHeader = ({ game, name }: Pick<GameViewProps, "game" | "name">) => {
-  const whoseTurnPlayer = game.players[game.whose_turn]
-  const whoseTurn = <h3 className="whose-turn">It's {whoseTurnPlayer.name == name ? "your" : `${whoseTurnPlayer.name}'s`} turn</h3>
-
+  const curPlayer = game.players[game.whose_turn]
   const scores = game.players.map((p, i) =>
     <div className="row" key={i}>
       <p className="name">{p.name}</p>
@@ -86,7 +84,9 @@ const GameViewHeader = ({ game, name }: Pick<GameViewProps, "game" | "name">) =>
         <div className="row"><p className="name">Player</p><p className="score">Score</p></div>
         {scores}
       </div>
-      {whoseTurn}
+      <div className="whose-turn">
+        <h3>It's {curPlayer.name == name ? "your" : `${curPlayer.name}'s`} turn</h3>
+      </div>
     </div>
   )
 }

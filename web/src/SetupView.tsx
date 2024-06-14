@@ -42,7 +42,7 @@ export const SetupView = ({ game, name, joinGame, startGame }: SetupViewProps) =
     playerList = <ul className="setup-view-player-list">{playerListItems}</ul>
   }
 
-  const startGameButtonDisabled = game.players.length < 2 && false
+  const startGameButtonDisabled = game.players.length < 2
   const startGameButton = <button onClick={startGame} disabled={startGameButtonDisabled}>Start The Game</button>
   
   return (
