@@ -1,6 +1,6 @@
 import "./Tile.scss";
 import background from "./assets/tile/background.png";
-import { TileT, tileValues } from "./game";
+import { TileT, tileValues } from "./game-types";
 
 export type TileProps = {
   tile: TileT,

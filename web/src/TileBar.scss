@@ -1,9 +1,12 @@
+@use 'Tile' as tile;
+
 .tile-bar {
   border: 3px solid white;
   border-radius: 2px;
   display: flex;
-  width: fit-content;
-  height: fit-content;
+  width: calc((tile.$tile-width + 2px) * 7);
+  height: calc(tile.$tile-height + 2px);
+  place-content: center;
 }
 
 .tile-bar-tile {

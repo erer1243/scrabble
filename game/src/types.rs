@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 #[rustfmt::skip]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Tile {
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub enum Modifier {
     DoubleLetter,
     TripleLetter,
@@ -15,50 +15,43 @@ pub enum Modifier {
     TripleWord,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Direction {
-    Right,
-    Down,
-}
+pub type Position = (usize, usize);
 
-pub type Point = (usize, usize);
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 pub struct Board(pub [[Option<Tile>; 15]; 15]);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum InvalidMoveReason {
-    Disconnected,
-    NotAWord,
-    Impossible(String),
-}
-
 /// An attempt to play a word which may or may not be valid
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Move {
-    pub tiles: Vec<Tile>,
-    pub start: Point,
-    pub direction: Direction,
+    pub tiles: Vec<(Position, Tile)>,
 }
 
-/// An Nx1 or 1xN rectangle on the board
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-// pub struct BoardRegion {
-//     pub length: usize,
-//     pub start: Point,
-//     pub direction: Direction,
-// }
+#[derive(Clone, Debug, Serialize)]
+pub struct InvalidMove {
+    pub explanation: String,
+    pub positions: Vec<Position>,
+}
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+/// A move that a player previously made, that produced some number of new words on the board
+/// and was worth some number of points.
+#[derive(Clone, Debug, Serialize)]
+pub struct PlayedMove {
+    pub positions: Vec<Position>,
+    pub words: Vec<String>,
+    pub value: u32,
+}
+
+#[derive(Default, Clone, Debug, Serialize)]
 pub struct Player {
+    pub name: String,
     pub tiles: Vec<Tile>,
-    pub score: u32,
+    pub moves: Vec<PlayedMove>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Game {
     pub board: Board,
     pub tile_bag: Vec<Tile>,
     pub players: Vec<Player>,
-    pub whose_turn: u8,
+    pub whose_turn: usize,
 }

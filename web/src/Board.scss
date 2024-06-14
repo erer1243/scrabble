@@ -10,7 +10,8 @@
 }
 
 .board-square {
-  @include tile.tile-sized;
+  width: tile.$tile-width;
+  height: tile.$tile-width;
   border: 1.5px solid brown;
 }
 

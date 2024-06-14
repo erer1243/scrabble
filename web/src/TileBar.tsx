@@ -1,5 +1,5 @@
 import { Tile } from "./Tile"
-import { TileT } from "./game"
+import { TileT } from "./game-types"
 import "./TileBar.scss"
 
 export type TileBarProps = {

@@ -1,17 +1,20 @@
-import { BoardT, GameT } from "./game"
+import { GameT, InvalidMoveT, MoveT } from "./game-types"
 
-export const serverAddr: string = "ws://127.0.0.1:2222/"
+export const serverAddr: string = "ws://192.168.1.4:2222/"
 
 export type TableT = {
-  game: GameT,
-  players: Array<string>,
+  game: GameT
+  state: GameStateT
 }
 
+export type GameStateT = "Setup" | "Running" | "Review"
+
 export type ServerMessageT = 
-  { Update: { board: BoardT } }
-| { TableInfo: { table: TableT } }
+| { Table: TableT }
+| { InvalidMove: InvalidMoveT }
 
 export type ClientMessageT = 
-  { JoinTable: { id: string } }
-| { GetTableInfo: { table: string } }
-
+| "UpdateMe"
+| "StartGame"
+| { JoinWithName: string }
+| { PlayMove: MoveT }

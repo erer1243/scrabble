@@ -1,0 +1,4 @@
+- Reveal modifiers beneath tiles when hovered over on board
+- Show move errors and highlight relevant tiles on board after submitting a move
+- Board header with player names, scores, whose turn it is, etc
+- Update game-types.tsx to use PlayerT.moves instead of PlayerT.score

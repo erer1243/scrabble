@@ -1,8 +1,16 @@
 body {
   background-color: #242424;
-  -webkit-user-select: none;
+
+  // Disallow text selection
   user-select: none;
+  -webkit-user-select: none;
+
   display: flex;
+  // The 'safe' keyword is ignored by safari. 
+  // Without it, zooming in cuts off page content without allowing you to scroll to it
+  place-content: safe center;
 }
 
-:root {}
+:root {
+  margin: auto;
+}

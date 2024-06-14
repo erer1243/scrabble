@@ -1,5 +1,5 @@
 import { Tile } from "./Tile";
-import { BoardT, modifiers } from "./game"
+import { BoardT, modifiers } from "./game-types"
 import "./Board.scss"
 
 export type BoardProps = {

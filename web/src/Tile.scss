@@ -1,12 +1,11 @@
-@mixin tile-sized {
-  position: relative;
-  width: 3em;
-  height: 3em;
-  font-family: "Noto Sans", sans-serif;
-}
+$tile-width: 3em;
+$tile-height: 3em;
 
 .tile {
-  @include tile-sized;
+  width: $tile-width;
+  height: $tile-height;
+  font-family: "Noto Sans", sans-serif;
+  position: relative;
 }
 
 .tile-background {

@@ -1,9 +1,10 @@
 use std::{
+    fmt::Display,
     net::SocketAddr,
     sync::{atomic::AtomicUsize, Arc},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -13,48 +14,28 @@ use axum::{
     routing::get,
     Router,
 };
-use game::{Board, Game};
+use game::{Game, InvalidMove, Move};
 use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpListener,
-    sync::{Mutex, Notify},
-    task,
+    sync::{broadcast, RwLock},
 };
-
-type Global = Arc<GlobalState>;
-
-struct GlobalState {
-    table: Mutex<Table>,
-    notify: Notify,
-}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let global = Arc::new(GlobalState {
-        table: Mutex::new(Table::new(2)),
-        notify: Notify::new(),
+    let g = Arc::new(GlobalState {
+        table: RwLock::new(Table::new()),
+        update_send: broadcast::channel(1).0,
     });
 
-    let g = global.clone();
-    task::spawn(async move {
-        let mut game = Game::new(2);
-        for _ in 0..50 {
-            let (x, y, t): (usize, usize, u8) = rand::random();
-            game.board[x % 15][y % 15] = game::Tile::from_u8(t % 27);
-        }
+    // let mut table = g.table.write().await;
+    // table.game.add_player("sex haver".to_string());
+    // table.state = GameState::Running;
+    // drop(table);
 
-        let mut tbl = g.table.lock().await;
-        tbl.game = game;
-        drop(tbl);
-
-        g.notify.notify_waiters();
-    });
-
-    let g = global.clone();
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
-    let listener = TcpListener::bind("0.0.0.0:2222").await.unwrap();
     axum::serve(
-        listener,
+        TcpListener::bind("0.0.0.0:2222").await.unwrap(),
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
@@ -66,40 +47,135 @@ async fn handle_connection(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     g: Global,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |sock| ConnectionHandler::handle_socket(sock, g, addr))
+    ws.on_upgrade(move |sock| Connection::handle_connection(sock, g, addr))
 }
 
-struct ConnectionHandler {
+tokio::task_local! {
+    // Connection ID
+    static CID: usize;
+}
+
+macro_rules! log {
+    ($($x:tt)*) => {
+        println!("[{}] {}", CID.get(), format_args!($($x)*))
+    };
+}
+
+struct Connection {
     ws: WebSocket,
     g: Global,
     addr: SocketAddr,
-    cid: usize,
+    name: Option<String>,
+    update_recv: broadcast::Receiver<()>,
 }
 
-impl ConnectionHandler {
-    async fn handle_socket(ws: WebSocket, g: Global, addr: SocketAddr) {
-        let mut handler = ConnectionHandler {
-            ws,
-            g,
-            addr,
-            cid: count(),
-        };
+impl Connection {
+    async fn handle_connection(ws: WebSocket, g: Global, addr: SocketAddr) {
+        CID.scope(count(), async move {
+            let update_recv = g.update_send.subscribe();
+            let mut handler = Connection {
+                ws,
+                g,
+                addr,
+                name: None,
+                update_recv,
+            };
 
-        if let Err(e) = handler.go().await {
-            println!("[{}] Error: {}", handler.cid, e);
+            if let Err(e) = handler.main_loop().await {
+                log!("Error: {e}");
+            }
+        })
+        .await
+    }
+
+    async fn main_loop(&mut self) -> Result<()> {
+        log!("Connection from {}", self.addr);
+
+        loop {
+            tokio::select! {
+                msg = self.ws.recv_message() => {
+                    self.handle_message(msg?).await?;
+                }
+
+                recv_res = self.update_recv.recv() => {
+                    if recv_res == Err(broadcast::error::RecvError::Closed) {
+                        unreachable!("update broadcast sender was dropped");
+                    }
+
+                    // Pretend that being notified of an update from another task
+                    // is actually receiving an update request from the client
+                    self.handle_message(ClientMessage::UpdateMe).await?;
+                }
+            }
         }
     }
 
-    async fn go(&mut self) -> Result<()> {
-        println!("[{}] Connection from {}", self.cid, self.addr);
-        let tbl = self.g.table.lock().await;
-        self.ws
-            .send_msg(ServerMessage::TableInfo { table: &*tbl })
-            .await?;
-        drop(tbl);
-        loop {
-            self.ws.recv_message().await?;
+    async fn handle_message(&mut self, msg: ClientMessage) -> Result<()> {
+        #[rustfmt::skip]
+        macro_rules! table {
+            () => { &*self.g.table.read().await };
+            (mut) => { &mut *self.g.table.write().await };
         }
+
+        let mut update_everyone = true;
+        match msg {
+            ClientMessage::UpdateMe => {
+                update_everyone = false;
+                self.ws.send_msg(ServerMessage::Table(table!())).await?;
+            }
+            ClientMessage::StartGame => {
+                let table = table!(mut);
+                ensure!(table.state == GameState::Setup, "Game already started");
+                ensure!(table.game.ready_to_play(), "Game is not ready to play");
+                table.state = GameState::Running;
+                table.game.start_game();
+            }
+            ClientMessage::JoinWithName(name) => {
+                ensure!(
+                    self.name.is_none() || self.name.as_ref().unwrap() == &name,
+                    "Player is already in the game but tried to set a new name"
+                );
+
+                let table = table!(mut);
+                match table.state {
+                    GameState::Setup => {
+                        if table.game.has_player(&name) {
+                            update_everyone = false;
+                            self.name = Some(name);
+                        } else {
+                            ensure!(table.game.players.len() < 5, "Game already full");
+                            table.game.add_player(name.clone());
+                            self.name = Some(name);
+                        }
+                    }
+                    GameState::Running => {
+                        ensure!(table.game.has_player(&name), "No player with given name");
+                        self.name = Some(name);
+                    }
+                    GameState::Review => bail!("Can't join game in review"),
+                }
+            }
+            ClientMessage::PlayMove(m) => {
+                let table = table!(mut);
+                ensure!(table.state == GameState::Running, "Game is not running");
+                ensure!(self.name.is_some(), "Have not joined the game yet");
+                let name = self.name.as_ref().unwrap();
+                ensure!(table.game.is_players_turn(name), "It's not your turn");
+                match table.game.play_move(&m) {
+                    Ok(()) => (),
+                    Err(im) => {
+                        update_everyone = false;
+                        self.ws.send_msg(ServerMessage::InvalidMove(&im)).await?;
+                    }
+                }
+            }
+        }
+
+        if update_everyone {
+            self.g.send_update();
+        }
+
+        Ok(())
     }
 }
 
@@ -108,37 +184,62 @@ fn count() -> usize {
     COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-/// An instance of a running game
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Table {
-    game: Game,
-    players: Vec<String>,
+type Global = Arc<GlobalState>;
+
+struct GlobalState {
+    table: RwLock<Table>,
+    update_send: broadcast::Sender<()>,
 }
 
-impl Table {
-    fn new(num_players: usize) -> Self {
+impl GlobalState {
+    fn new() -> Self {
         Self {
-            game: Game::new(num_players),
-            players: (1..=num_players).map(|n| format!("Player {n}")).collect(),
+            table: RwLock::new(Table::new()),
+            update_send: broadcast::channel(1).0,
+        }
+    }
+
+    fn send_update(&self) {
+        if let Err(broadcast::error::SendError(())) = self.update_send.send(()) {
+            unreachable!("there are no tasks receiving updates, but a task sent one out")
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
-enum ServerMessage<'a> {
-    TableInfo { table: &'a Table },
-    Update { board: &'a Board },
+struct Table {
+    game: Game,
+    state: GameState,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl Table {
+    fn new() -> Self {
+        Table {
+            game: Game::new(),
+            state: GameState::Setup,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+enum GameState {
+    Setup,
+    Running,
+    Review,
+}
+
+#[derive(Debug, Clone, Serialize)]
+enum ServerMessage<'a> {
+    Table(&'a Table),
+    InvalidMove(&'a InvalidMove),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 enum ClientMessage {
-    JoinTable {
-        table: String,
-        as_player_index: usize,
-    },
-    GetTableInfo {
-        table: String,
-    },
+    UpdateMe,
+    StartGame,
+    JoinWithName(String),
+    PlayMove(Move),
 }
 
 #[extend::ext]
@@ -151,7 +252,11 @@ impl WebSocket {
                 None => bail!("Client already disconnected"),
             };
             match msg {
-                Message::Text(json) => return Ok(serde_json::from_str(&json)?),
+                Message::Text(json) => {
+                    let msg = serde_json::from_str(&json)?;
+                    log!("Message recv: {msg:?}");
+                    return Ok(msg);
+                }
                 Message::Close(frame) => bail!("Close frame received: {frame:?}"),
                 Message::Binary(_) => bail!("Received binary message"),
                 Message::Ping(data) => self.pong(data).await?,
@@ -161,6 +266,7 @@ impl WebSocket {
     }
 
     async fn send_msg(&mut self, msg: ServerMessage<'_>) -> Result<()> {
+        log!("Message send: {msg}");
         self.send(Message::Text(serde_json::to_string(&msg)?))
             .await?;
         Ok(())
@@ -169,5 +275,16 @@ impl WebSocket {
     async fn pong(&mut self, data: Vec<u8>) -> Result<()> {
         self.send(Message::Pong(data)).await?;
         Ok(())
+    }
+}
+
+impl Display for ServerMessage<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServerMessage::Table(t) => write!(f, "Table {{ state: {:?}, .. }}", t.state),
+            ServerMessage::InvalidMove(im) => {
+                write!(f, "InvalidMove {{ explanation: {}, .. }}", im.explanation)
+            }
+        }
     }
 }

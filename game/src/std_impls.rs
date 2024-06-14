@@ -53,7 +53,7 @@ impl Display for Game {
         writeln!(f, "{}", self.board)?;
         for (n, p) in self.players.iter().enumerate() {
             let tiles = tiles_str(&p.tiles);
-            writeln!(f, "Player {n} | {} points | ⎣{}⎦", p.score, tiles)?;
+            writeln!(f, "Player {n} | {} points | ⎣{}⎦", p.score(), tiles)?;
         }
         writeln!(f, "It is player {}'s turn", self.whose_turn)?;
         write!(f, "Remaining tiles: {}", tiles_str(&self.tile_bag))?;
