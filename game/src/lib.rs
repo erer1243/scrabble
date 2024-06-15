@@ -12,7 +12,8 @@ mod std_impls;
 #[cfg(test)]
 mod tests;
 
-use core::slice;
+use arrayvec::ArrayVec;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::{
@@ -21,6 +22,7 @@ use std::{
     io::{self, BufRead, BufReader},
     ops::Range,
     path::Path,
+    slice,
 };
 
 use serde::{Deserialize, Serialize};
@@ -109,21 +111,6 @@ pub struct Move {
     pub tiles: Vec<(Position, Tile)>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct InvalidMove {
-    pub explanation: String,
-    pub positions: Vec<Position>,
-}
-
-/// A move that a player previously made, that produced some number of new words on the board
-/// and was worth some number of points.
-#[derive(Clone, Debug, Serialize)]
-pub struct PlayedMove {
-    pub positions: Vec<Position>,
-    pub words: Vec<String>,
-    pub value: u32,
-}
-
 impl Move {
     fn crosses_center(&self) -> bool {
         self.tiles.iter().any(|(p, _)| *p == (7, 7))
@@ -142,6 +129,25 @@ impl Move {
         let (_, y0) = self.tiles[0].0;
         self.tiles.iter().all(|((_, y), _)| *y == y0)
     }
+
+    fn is_straight_line(&self) -> bool {
+        self.is_vertical() || self.is_horizontal()
+    }
+
+    /// This function makes no assertions that the tiles are actually in a straight line,
+    /// it just orders them lexicographically by board position. If they are in a straight line,
+    /// then this returns the word in order.
+    fn tiles_in_order(&self) -> Vec<Tile> {
+        let mut indices: Vec<_> = (0..self.tiles.len()).collect();
+        indices.sort_unstable_by_key(|i| self.tiles[*i].0);
+        indices.into_iter().map(|i| self.tiles[i].1).collect()
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InvalidMove {
+    pub explanation: String,
+    pub positions: Vec<Position>,
 }
 
 impl InvalidMove {
@@ -151,6 +157,15 @@ impl InvalidMove {
             positions: relevant_squares,
         }
     }
+}
+
+/// A move that a player previously made, that produced some number of new words on the board
+/// and was worth some number of points.
+#[derive(Clone, Debug, Serialize)]
+pub struct PlayedMove {
+    pub positions: Vec<Position>,
+    pub words: Vec<String>,
+    pub value: u32,
 }
 
 /// Includes the center as a double word modifier.
@@ -199,7 +214,7 @@ impl Board {
             ));
         }
 
-        if !(m.is_horizontal() || m.is_vertical()) {
+        if !m.is_straight_line() {
             return Err(InvalidMove::new(
                 "That move is not a straight line",
                 m.positions(),
@@ -402,13 +417,12 @@ fn solve_for_blanks(
 
     let n_blanks = segments.len() - 1;
     let mut fills: Vec<Tile> = Vec::with_capacity(n_blanks);
-    let mut buf: Vec<Tile> = Vec::with_capacity(16);
+    let mut buf: ArrayVec<Tile, 32> = ArrayVec::new();
 
     macro_rules! partial_word {
         () => { partial_word!(. None) };
         ($extra:expr) => { partial_word!(. Some(& $extra)) };
         (. $extra:expr) => {{
-            use itertools::Itertools;
             let iter = segments
                 .iter()
                 .copied()
@@ -425,9 +439,9 @@ fn solve_for_blanks(
         ($i:expr, $fill:expr) => {{
             let (a, b) = crossing_words[$i].unwrap();
             buf.clear();
-            buf.extend_from_slice(a);
+            buf.try_extend_from_slice(a).unwrap();
             buf.push($fill);
-            buf.extend_from_slice(b);
+            buf.try_extend_from_slice(b).unwrap();
             buf.as_slice()
         }};
     }
@@ -439,11 +453,15 @@ fn solve_for_blanks(
     }
 
     let mut tile = Tile::A;
-    while fills.len() < n_blanks || !is_word(partial_word!()) {
+    while fills.len() < n_blanks {
         let m_range = word_prefix_range(partial_word!(tile));
         let cwi = fills.len();
         let cw = crossing_words[cwi];
-        if m_range.is_some() && implies!(cw.is_some(), is_word(crossing_word!(cwi, tile))) {
+
+        if m_range.is_some()
+            && implies!(cw.is_some(), is_word(crossing_word!(cwi, tile)))
+            && implies!(fills.len() + 1 == n_blanks, is_word(partial_word!(tile)))
+        {
             fills.push(tile);
             tile = Tile::A;
         } else {
@@ -459,9 +477,7 @@ fn solve_for_blanks(
         }
     }
 
-    // XXX the actual return value should be the fills only, this is just for debugging
-    _ = partial_word!();
-    Some(buf)
+    Some(fills)
 }
 
 fn word_prefix_range(prefix: &[Tile]) -> Option<Range<usize>> {

@@ -3,12 +3,41 @@ use crate::*;
 #[test]
 fn solve_for_blanks_test() {
     use Tile::*;
-    println!(
-        "{:?}",
-        solve_for_blanks(&[&[A, P], &[L, E]], &[Some((&[A], &[P, L, E]))])
-    );
 
-    println!("{:?}", solve_for_blanks(&[&[], &[], &[]], &[None, None]));
+    fn test(
+        segments: &[&[Tile]],
+        crossing_words: &[Option<(&[Tile], &[Tile])>],
+        expecting: Option<&[Tile]>,
+    ) {
+        let m_fills = solve_for_blanks(segments, crossing_words);
+        println!("{segments:?} + {crossing_words:?} -> {m_fills:?}");
+        assert_eq!(m_fills.as_ref().map(|v| v.as_slice()), expecting);
+    }
+
+    test(&[&[A, P], &[L, E]], &[Some((&[A], &[P, L, E]))], Some(&[P]));
+    test(&[&[], &[], &[]], &[None, None], Some(&[A, A]));
+    test(&[&[], &[], &[], &[]], &[None, None, None], Some(&[A, A, A]));
+    test(
+        &[&[], &[], &[], &[], &[]],
+        &[
+            Some((&[], &[U, C, K])),
+            Some((&[F], &[C, K])),
+            Some((&[F, U], &[K])),
+            Some((&[F, U, C], &[])),
+        ],
+        Some(&[B, A, C, K]),
+    );
+    test(
+        &[&[W, O, R, D], &[]],
+        &[Some((&[S, P, A, N, K], &[]))],
+        Some(&[S]),
+    );
+    test(&[&[N, O, T, A, W, O, R, D], &[]], &[None], None);
+    test(
+        &[&[W, O, R, D], &[]],
+        &[Some((&[N, O, T, A, W, O, R, D], &[]))],
+        None,
+    );
 }
 
 #[test]
@@ -30,7 +59,7 @@ fn binary_search_for_prefix_range_test() {
             assert!(!WORDLIST[start - 1].as_bytes().starts_with(prefix));
             assert!(!WORDLIST[end + 1].as_bytes().starts_with(prefix));
             println!(
-                "{} => {:?}",
+                "{} -> {:?}",
                 std::str::from_utf8(prefix).unwrap(),
                 &(&*WORDLIST)[start..end]
             );

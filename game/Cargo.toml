@@ -8,3 +8,4 @@ once_cell = "1.19.0"
 serde = { version = "1.0.203", features = ["derive"] }
 rand = "0.8.5"
 itertools = "0.13.0"
+arrayvec = { version = "0.7.4", features = ["serde"] }
