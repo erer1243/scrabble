@@ -7,6 +7,8 @@ fn solve_for_blanks_test() {
         "{:?}",
         solve_for_blanks(&[&[A, P], &[L, E]], &[Some((&[A], &[P, L, E]))])
     );
+
+    println!("{:?}", solve_for_blanks(&[&[], &[], &[]], &[None, None]));
 }
 
 #[test]
@@ -18,25 +20,25 @@ fn binary_search_for_prefix_range_test() {
     assert_eq!(test(b"a"), Some(0..5));
     assert_eq!(test(b"ab"), Some(1..3));
     assert_eq!(test(b"abb"), Some(2..3));
+    assert_eq!(test(b""), Some(0..11));
     assert_eq!(test(b"aaa"), None);
     assert_eq!(test(b"x"), None);
     assert_eq!(test(b"A"), None);
 
     let test = |prefix| {
-        if let Some(Range { start: l, end: r }) = binary_search_for_prefix_range(&*WORDLIST, prefix)
-        {
-            assert!(!WORDLIST[l - 1].as_bytes().starts_with(prefix));
-            assert!(!WORDLIST[r + 1].as_bytes().starts_with(prefix));
+        if let Some(Range { start, end }) = binary_search_for_prefix_range(&*WORDLIST, prefix) {
+            assert!(!WORDLIST[start - 1].as_bytes().starts_with(prefix));
+            assert!(!WORDLIST[end + 1].as_bytes().starts_with(prefix));
             println!(
-                "{} => {:?}\n",
+                "{} => {:?}",
                 std::str::from_utf8(prefix).unwrap(),
-                &(&*WORDLIST)[l..r]
+                &(&*WORDLIST)[start..end]
             );
         }
     };
     test(b"apple");
     test(b"fuck");
-    test(b"zoo");
+    test(b"poop");
     test(b"onomatopoeia");
     test(b"this is not a word");
     test(b"XXXXXXXXXXXXXX");

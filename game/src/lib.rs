@@ -373,31 +373,15 @@ impl Game {
 static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
     let rdr = BufReader::new(File::open(path).unwrap());
-    let mut words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
+    let words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
 
-    // This should be O(n) because the word list is already sorted, but sort just in case
-    // there is an error somewhere.
-    words.sort_unstable();
-
-    // I want to be able to assume chars are single lowercase bytes in these strings
-    assert!(words
+    debug_assert!(words.windows(2).all(|w| w[0] < w[1]));
+    debug_assert!(words
         .iter()
         .all(|w| w.chars().all(|c| c.is_ascii_lowercase())));
 
     words
 });
-
-// fn tiles_to_string(tiles: &[Tile]) -> String {
-//     tiles.iter().copied().map(Tile::as_char).collect()
-// }
-
-// fn tiles_to_bytes(tiles: &[Tile]) -> Vec<u8> {
-//     tiles_to_string(tiles).into_bytes()
-// }
-
-// fn bytes_to_tiles(bytes: &[u8]) -> Vec<Tile> {
-//     bytes.iter().copied().map(Tile::from_ascii).collect()
-// }
 
 fn tiles_to_bytes(tiles: &[Tile]) -> &[u8] {
     unsafe { std::mem::transmute(tiles) }
@@ -450,41 +434,27 @@ fn solve_for_blanks(
 
     macro_rules! implies {
         ($a:expr, $b:expr) => {
-            !($a && !$b)
+            !$a || $b
         };
     }
 
-    let mut first = true;
+    let mut tile = Tile::A;
     while fills.len() < n_blanks || !is_word(partial_word!()) {
-        let mut tile = match fills.pop() {
-            Some(prev_tile) => match prev_tile.successor() {
-                Some(next_tile) => next_tile,
-                None => continue,
-            },
-            None if first => {
-                first = false;
-                Tile::A
-            }
-            None => return None,
-        };
-
-        loop {
-            let m_range = word_prefix_range(partial_word!(tile));
-            let cwi = fills.len();
-            if m_range.is_some()
-                && implies!(
-                    crossing_words[cwi].is_some(),
-                    is_word(crossing_word!(cwi, tile))
-                )
-            {
-                fills.push(tile);
-                break;
-            }
-
-            if let Some(next_tile) = tile.successor() {
-                tile = next_tile;
-            } else {
-                break;
+        let m_range = word_prefix_range(partial_word!(tile));
+        let cwi = fills.len();
+        let cw = crossing_words[cwi];
+        if m_range.is_some() && implies!(cw.is_some(), is_word(crossing_word!(cwi, tile))) {
+            fills.push(tile);
+            tile = Tile::A;
+        } else {
+            loop {
+                match tile.successor() {
+                    Some(next_tile) => {
+                        tile = next_tile;
+                        break;
+                    }
+                    None => tile = fills.pop()?,
+                }
             }
         }
     }
@@ -492,58 +462,6 @@ fn solve_for_blanks(
     // XXX the actual return value should be the fills only, this is just for debugging
     _ = partial_word!();
     Some(buf)
-
-    // let mut prefix_stk: Vec<Range<usize>> = Vec::with_capacity(n_blanks);
-    // while prefix_stk.len() < n_blanks {
-
-    // }
-
-    // let mut buf = [Tile::Blank; 128];
-
-    // fn collect_into_slice<T, I: IntoIterator<Item = T>>(slice: &mut [T], iter: I) -> &[T] {
-    //     let mut n = 0;
-    //     for (a, b) in slice.iter_mut().zip(iter.into_iter()) {
-    //         n += 1;
-    //         *a = b;
-    //     }
-    //     &slice[..n]
-    // }
-
-    // let mut curr_word = &buf[..0];
-    // macro_rules! curr_word {
-    //     ($extra:expr) => {{
-    //         let mut l = 0;
-    //         for (i, fb) in filled_blanks.iter().enumerate() {
-    //             // Copy in the segment before the filled blank
-    //             let seg = non_blank_segments[i];
-    //             (&mut buf[l..l + seg.len()]).copy_from_slice(seg);
-    //             l += seg.len();
-
-    //             // Copy in the filled blank
-    //             buf[l] = fb.tile;
-    //         }
-
-    //         if let Some(b) = $extra {
-    //             buf[l] = b;
-    //             l += 1;
-    //         }
-
-    //         &buf[..l]
-    //         // curr_word = &buf[..l];
-    //         // curr_word
-    //     }};
-
-    //     () => {
-    //         curr_word!(None)
-    //     };
-    // }
-
-    // while filled_blanks.len() < n_blanks {
-    //     let mut next_tile = Tile::A;
-    //     let range
-    // }
-
-    // None
 }
 
 fn word_prefix_range(prefix: &[Tile]) -> Option<Range<usize>> {
@@ -634,5 +552,5 @@ where
         }
     }
 
-    unreachable!("there is no start to the prefix range, so there can be no end");
+    unreachable!("precondition unmet or bug in implementation");
 }
