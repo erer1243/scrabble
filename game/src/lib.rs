@@ -9,13 +9,17 @@
 
 mod std_impls;
 
+#[cfg(test)]
+mod tests;
+
+use core::slice;
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::{
     collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader},
-    ops::Index,
+    ops::Range,
     path::Path,
 };
 
@@ -25,29 +29,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Tile {
-    A = 0, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank,
+     Blank = b'*', A = b'a', B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
 }
 
 impl Tile {
-    fn from_u8(n: u8) -> Option<Self> {
-        // 26 letters + blank = 27
-        if n < 27 {
-            unsafe { Some(std::mem::transmute(n)) }
-        } else {
+    fn from_ascii(n: u8) -> Option<Self> {
+        if !n.is_ascii_lowercase() {
             None
+        } else {
+            Some(unsafe { std::mem::transmute(n) })
         }
     }
 
     fn as_ascii(self) -> u8 {
-        if self == Tile::Blank {
-            b'*'
-        } else {
-            b'a' + self as u8
-        }
+        self as u8
     }
 
     fn as_char(self) -> char {
         char::from(self.as_ascii())
+    }
+
+    fn successor(self) -> Option<Self> {
+        Self::from_ascii(self.as_ascii() + 1)
     }
 
     fn point_value(self) -> u32 {
@@ -78,22 +81,26 @@ impl Tile {
         }
     }
 
+    fn iter_alphabet() -> impl Iterator<Item = Tile> {
+        (b'a'..=b'z').map(|c| Tile::from_ascii(c).unwrap())
+    }
+
     fn iter_game_count() -> impl Iterator<Item = Tile> {
         let mut cur_tile = Tile::A;
         let mut cur_tile_count = cur_tile.number_in_game();
         std::iter::from_fn(move || {
             if cur_tile_count == 0 {
-                cur_tile = Tile::from_u8(cur_tile as u8 + 1)?;
+                cur_tile = if cur_tile == Tile::Z {
+                    Tile::Blank
+                } else {
+                    cur_tile.successor()?
+                };
                 cur_tile_count = cur_tile.number_in_game();
             }
             cur_tile_count -= 1;
             Some(cur_tile)
         })
     }
-}
-
-fn tiles_to_string(tiles: &[Tile]) -> String {
-    tiles.iter().copied().map(Tile::as_char).collect()
 }
 
 /// An attempt to play a word which may or may not be valid
@@ -365,8 +372,7 @@ impl Game {
 
 static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
-    let f = File::open(path).unwrap();
-    let rdr = BufReader::new(f);
+    let rdr = BufReader::new(File::open(path).unwrap());
     let mut words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
 
     // This should be O(n) because the word list is already sorted, but sort just in case
@@ -381,54 +387,187 @@ static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
     words
 });
 
-type Bytes<'a> = &'a [u8];
+// fn tiles_to_string(tiles: &[Tile]) -> String {
+//     tiles.iter().copied().map(Tile::as_char).collect()
+// }
 
-fn is_word(word: Bytes) -> bool {
+// fn tiles_to_bytes(tiles: &[Tile]) -> Vec<u8> {
+//     tiles_to_string(tiles).into_bytes()
+// }
+
+// fn bytes_to_tiles(bytes: &[u8]) -> Vec<Tile> {
+//     bytes.iter().copied().map(Tile::from_ascii).collect()
+// }
+
+fn tiles_to_bytes(tiles: &[Tile]) -> &[u8] {
+    unsafe { std::mem::transmute(tiles) }
+}
+
+fn is_word(word: &[Tile]) -> bool {
     WORDLIST
-        .binary_search_by(|w| w.as_bytes().cmp(word))
+        .binary_search_by(|w| w.as_bytes().cmp(tiles_to_bytes(word)))
         .is_ok()
 }
 
-fn solve_multiword(
-    segments: &[Bytes],
-    crossers: &[Option<(Bytes, Bytes)>],
-) -> Option<&'static str> {
-    struct State {}
+fn solve_for_blanks(
+    segments: &[&[Tile]],
+    crossing_words: &[Option<(&[Tile], &[Tile])>],
+) -> Option<Vec<Tile>> {
+    assert!(segments.len() > 1);
+    assert!(crossing_words.len() == segments.len() - 1);
 
-    let mut buf = Vec::<u8>::with_capacity(16);
-    let mut stk = Vec::<State>::with_capacity(segments.len() - 1);
+    let n_blanks = segments.len() - 1;
+    let mut fills: Vec<Tile> = Vec::with_capacity(n_blanks);
+    let mut buf: Vec<Tile> = Vec::with_capacity(16);
 
-    // stk.push(b'a');
+    macro_rules! partial_word {
+        () => { partial_word!(. None) };
+        ($extra:expr) => { partial_word!(. Some(& $extra)) };
+        (. $extra:expr) => {{
+            use itertools::Itertools;
+            let iter = segments
+                .iter()
+                .copied()
+                .interleave_shortest(fills.iter().chain($extra).map(std::slice::from_ref))
+                .flatten()
+                .copied();
+            buf.clear();
+            buf.extend(iter);
+            buf.as_slice()
+        }};
+    }
 
-    None
+    macro_rules! crossing_word {
+        ($i:expr, $fill:expr) => {{
+            let (a, b) = crossing_words[$i].unwrap();
+            buf.clear();
+            buf.extend_from_slice(a);
+            buf.push($fill);
+            buf.extend_from_slice(b);
+            buf.as_slice()
+        }};
+    }
+
+    macro_rules! implies {
+        ($a:expr, $b:expr) => {
+            !($a && !$b)
+        };
+    }
+
+    let mut first = true;
+    while fills.len() < n_blanks || !is_word(partial_word!()) {
+        let mut tile = match fills.pop() {
+            Some(prev_tile) => match prev_tile.successor() {
+                Some(next_tile) => next_tile,
+                None => continue,
+            },
+            None if first => {
+                first = false;
+                Tile::A
+            }
+            None => return None,
+        };
+
+        loop {
+            let m_range = word_prefix_range(partial_word!(tile));
+            let cwi = fills.len();
+            if m_range.is_some()
+                && implies!(
+                    crossing_words[cwi].is_some(),
+                    is_word(crossing_word!(cwi, tile))
+                )
+            {
+                fills.push(tile);
+                break;
+            }
+
+            if let Some(next_tile) = tile.successor() {
+                tile = next_tile;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // XXX the actual return value should be the fills only, this is just for debugging
+    _ = partial_word!();
+    Some(buf)
+
+    // let mut prefix_stk: Vec<Range<usize>> = Vec::with_capacity(n_blanks);
+    // while prefix_stk.len() < n_blanks {
+
+    // }
+
+    // let mut buf = [Tile::Blank; 128];
+
+    // fn collect_into_slice<T, I: IntoIterator<Item = T>>(slice: &mut [T], iter: I) -> &[T] {
+    //     let mut n = 0;
+    //     for (a, b) in slice.iter_mut().zip(iter.into_iter()) {
+    //         n += 1;
+    //         *a = b;
+    //     }
+    //     &slice[..n]
+    // }
+
+    // let mut curr_word = &buf[..0];
+    // macro_rules! curr_word {
+    //     ($extra:expr) => {{
+    //         let mut l = 0;
+    //         for (i, fb) in filled_blanks.iter().enumerate() {
+    //             // Copy in the segment before the filled blank
+    //             let seg = non_blank_segments[i];
+    //             (&mut buf[l..l + seg.len()]).copy_from_slice(seg);
+    //             l += seg.len();
+
+    //             // Copy in the filled blank
+    //             buf[l] = fb.tile;
+    //         }
+
+    //         if let Some(b) = $extra {
+    //             buf[l] = b;
+    //             l += 1;
+    //         }
+
+    //         &buf[..l]
+    //         // curr_word = &buf[..l];
+    //         // curr_word
+    //     }};
+
+    //     () => {
+    //         curr_word!(None)
+    //     };
+    // }
+
+    // while filled_blanks.len() < n_blanks {
+    //     let mut next_tile = Tile::A;
+    //     let range
+    // }
+
+    // None
 }
 
-fn binary_search_for_prefix_range<T, B>(
-    arr: &T,
-    prefix: Bytes,
-    mut l: usize,
-    mut r: usize,
-) -> Option<(usize, usize)>
+fn word_prefix_range(prefix: &[Tile]) -> Option<Range<usize>> {
+    let prefix_bytes = unsafe { slice::from_raw_parts(prefix.as_ptr().cast(), prefix.len()) };
+    binary_search_for_prefix_range(&WORDLIST, prefix_bytes)
+}
+
+fn binary_search_for_prefix_range<B>(arr: &[B], prefix: &[u8]) -> Option<Range<usize>>
 where
-    T: Index<usize, Output = B>,
     B: AsRef<[u8]>,
 {
-    l = binary_search_for_prefix_range_start(arr, prefix, l, r)?;
-    r = binary_search_for_prefix_range_end(arr, prefix, l, r)?;
-    Some((l, r))
+    let start = binary_search_for_prefix_range_start(arr, prefix)?;
+    let end = start + 1 + binary_search_for_prefix_range_end(&arr[start..], prefix);
+    Some(Range { start, end })
 }
 
-fn binary_search_for_prefix_range_start<T, B>(
-    arr: &T,
-    prefix: Bytes,
-    mut l: usize,
-    mut r: usize,
-) -> Option<usize>
+fn binary_search_for_prefix_range_start<B>(arr: &[B], prefix: &[u8]) -> Option<usize>
 where
-    T: Index<usize, Output = B>,
     B: AsRef<[u8]>,
 {
     use std::cmp::Ordering::*;
+
+    let mut l = 0;
+    let mut r = arr.len() - 1;
 
     while l <= r {
         let m = (l + r) / 2;
@@ -455,30 +594,29 @@ where
     None
 }
 
-fn binary_search_for_prefix_range_end<T, B>(
-    arr: &T,
-    prefix: Bytes,
-    mut l: usize,
-    mut r: usize,
-) -> Option<usize>
+/// Precondition: arr contains at least one element that is prefixed by `prefix`
+/// i.e. `binary_search_for_prefix_range_start(arr, prefix)` returned `Some(..)`.
+fn binary_search_for_prefix_range_end<B>(arr: &[B], prefix: &[u8]) -> usize
 where
-    T: Index<usize, Output = B>,
     B: AsRef<[u8]>,
 {
     use std::cmp::Ordering::*;
 
-    let right_edge = r;
+    let mut l = 0;
+    let mut r = arr.len() - 1;
+    let last = r;
 
     while l <= r {
         let m = (l + r) / 2;
         let m_word = arr[m].as_ref();
+        let found_end = || m == last || !arr[m + 1].as_ref().starts_with(prefix);
 
         match m_word.cmp(prefix) {
             Less => l = m + 1,
             Greater => {
                 if m_word.starts_with(prefix) {
-                    if m == right_edge || !arr[m + 1].as_ref().starts_with(prefix) {
-                        return Some(m);
+                    if found_end() {
+                        return m;
                     } else {
                         l = m + 1;
                     }
@@ -487,8 +625,8 @@ where
                 }
             }
             Equal => {
-                if m == right_edge || !arr[m + 1].as_ref().starts_with(prefix) {
-                    return Some(m);
+                if found_end() {
+                    return m;
                 } else {
                     l = m + 1;
                 }
@@ -496,55 +634,5 @@ where
         }
     }
 
-    None
-}
-
-#[test]
-fn binary_search_for_prefix_range_test() {
-    let arr = [
-        "aa", "ab", "abb", "ac", "ad", "ba", "bb", "bc", "ca", "cb", "cc",
-    ];
-    let test = |prefix| binary_search_for_prefix_range(&arr, prefix, 0, arr.len() - 1);
-    assert_eq!(test(b"a"), Some((0, 4)));
-    assert_eq!(test(b"ab"), Some((1, 2)));
-    assert_eq!(test(b"abb"), Some((2, 2)));
-    assert_eq!(test(b"aaa"), None);
-    assert_eq!(test(b"x"), None);
-    assert_eq!(test(b"A"), None);
-
-    let test = |prefix| {
-        if let Some((l, r)) =
-            binary_search_for_prefix_range(&*WORDLIST, prefix, 0, WORDLIST.len() - 1)
-        {
-            assert!(!WORDLIST[l - 1].as_bytes().starts_with(prefix));
-            assert!(!WORDLIST[r + 1].as_bytes().starts_with(prefix));
-            println!(
-                "{} => {:?}\n",
-                std::str::from_utf8(prefix).unwrap(),
-                &(&*WORDLIST)[l..=r]
-            );
-        }
-    };
-    test(b"apple");
-    test(b"fuck");
-    test(b"zoo");
-    test(b"onomatopoeia");
-    test(b"this is not a word");
-    test(b"XXXXXXXXXXXXXX");
-}
-
-#[test]
-fn known_game_constants() {
-    assert_eq!(Tile::iter_game_count().count(), 100);
-    assert_eq!(
-        Tile::iter_game_count().map(Tile::point_value).sum::<u32>(),
-        187
-    );
-    assert_eq!(Board::default().0.len(), 15);
-    assert_eq!(Board::default()[0].len(), 15);
-}
-
-#[test]
-fn wordlist_tests() {
-    once_cell::sync::Lazy::force(&WORDLIST);
+    unreachable!("there is no start to the prefix range, so there can be no end");
 }

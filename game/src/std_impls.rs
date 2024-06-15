@@ -60,3 +60,9 @@ impl Display for Game {
         Ok(())
     }
 }
+
+impl Default for Game {
+    fn default() -> Self {
+        Game::new()
+    }
+}
