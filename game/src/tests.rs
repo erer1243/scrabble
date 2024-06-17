@@ -1,4 +1,51 @@
+use itertools::Itertools;
+use std::collections::HashSet;
+
 use crate::*;
+
+#[test]
+fn find_implied_moves() {
+    use Tile::*;
+
+    fn test(
+        premoves: impl IntoIterator<Item = Move>,
+        m: Move,
+        expected_moves: impl IntoIterator<Item = Move>,
+    ) {
+        let mut b = Board::new();
+        for pm in premoves {
+            b.apply_move(&pm);
+        }
+
+        let expected_moves: HashSet<_> = expected_moves.into_iter().update(|m| m.sort()).collect();
+        let implied_moves: HashSet<_> = b
+            .find_implied_moves(&m)
+            .into_iter()
+            .update(|m| m.sort())
+            .collect();
+
+        assert_eq!(expected_moves, implied_moves);
+    }
+
+    macro_rules! m {
+        ($($t:expr),*) => {
+            Move {
+                tiles: vec![$($t,)*]
+            }
+        }
+    }
+
+    test(
+        [],
+        m![((0, 0), A), ((0, 1), B)],
+        [m![((0, 0), A), ((0, 1), B)]],
+    );
+    test(
+        [m!(((0, 0), A))],
+        m!(((1, 0), B)),
+        [m!(((0, 0), A), ((1, 0), B))],
+    );
+}
 
 #[test]
 fn solve_for_blanks_test() {

@@ -18,10 +18,8 @@ use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::{
     collections::HashMap,
-    fs::File,
     io::{self, BufRead, BufReader},
     ops::Range,
-    path::Path,
     slice,
 };
 
@@ -106,9 +104,9 @@ impl Tile {
 }
 
 /// An attempt to play a word which may or may not be valid
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct Move {
-    pub tiles: Vec<(Position, Tile)>,
+    tiles: Vec<(Position, Tile)>,
 }
 
 impl Move {
@@ -116,8 +114,8 @@ impl Move {
         self.tiles.iter().any(|(p, _)| *p == (7, 7))
     }
 
-    fn positions(&self) -> Vec<Position> {
-        self.tiles.iter().map(|(p, _)| *p).collect()
+    fn positions<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
+        self.tiles.iter().map(|(p, _)| *p)
     }
 
     fn is_horizontal(&self) -> bool {
@@ -134,13 +132,8 @@ impl Move {
         self.is_vertical() || self.is_horizontal()
     }
 
-    /// This function makes no assertions that the tiles are actually in a straight line,
-    /// it just orders them lexicographically by board position. If they are in a straight line,
-    /// then this returns the word in order.
-    fn tiles_in_order(&self) -> Vec<Tile> {
-        let mut indices: Vec<_> = (0..self.tiles.len()).collect();
-        indices.sort_unstable_by_key(|i| self.tiles[*i].0);
-        indices.into_iter().map(|i| self.tiles[i].1).collect()
+    fn sort(&mut self) {
+        self.tiles.sort_unstable_by_key(|t| t.0);
     }
 }
 
@@ -151,10 +144,10 @@ pub struct InvalidMove {
 }
 
 impl InvalidMove {
-    fn new(explanation: impl Into<String>, relevant_squares: Vec<Position>) -> Self {
+    fn new(explanation: impl Into<String>, positions: impl IntoIterator<Item = Position>) -> Self {
         Self {
             explanation: explanation.into(),
-            positions: relevant_squares,
+            positions: positions.into_iter().collect(),
         }
     }
 }
@@ -202,6 +195,10 @@ pub type Position = (usize, usize);
 pub struct Board(pub [[Option<Tile>; 15]; 15]);
 
 impl Board {
+    fn new() -> Self {
+        Self::default()
+    }
+
     fn validate_and_score_move(&self, m: &Move) -> Result<PlayedMove, InvalidMove> {
         if m.tiles.is_empty() {
             return Err(InvalidMove::new("Empty move", vec![]));
@@ -235,6 +232,17 @@ impl Board {
                     m.positions(),
                 ));
             }
+        } else {
+            let overlaps: Vec<_> = m
+                .positions()
+                .filter(|(x, y)| self[*x][*y].is_some())
+                .collect();
+            if !overlaps.is_empty() {
+                return Err(InvalidMove::new(
+                    "Some spaces in that move are already covered (impossible)",
+                    overlaps,
+                ));
+            }
         }
 
         // TODO
@@ -245,8 +253,110 @@ impl Board {
         })
     }
 
-    fn find_words(&self, m: &Move) -> Vec<Vec<Tile>> {
-        Vec::new()
+    fn score_move(&self, m: &Move) -> u32 {
+        use Modifier::*;
+
+        let mut score = 0;
+        let mut word_multiplier = 1;
+
+        for ((x, y), t) in &m.tiles {
+            let modifier = if self[*x][*y].is_some() {
+                None
+            } else {
+                MODIFIERS.get(&(*x, *y))
+            };
+
+            let letter_multiplier = match modifier {
+                None => 1,
+                Some(DoubleLetter) => 2,
+                Some(TripleLetter) => 3,
+                Some(DoubleWord) => {
+                    word_multiplier *= 2;
+                    1
+                }
+                Some(TripleWord) => {
+                    word_multiplier *= 3;
+                    1
+                }
+            };
+
+            score += t.point_value() * letter_multiplier;
+        }
+
+        score * word_multiplier
+    }
+
+    /// Extend the given move to include tiles before and after it
+    /// eg PAIN[TER] -> [PAINTER]
+    fn expand_move(&self, m: &Move, dx: isize, dy: isize) -> Move {
+        let get = |x: isize, y: isize| {
+            if x < 0 || y < 0 || x >= 15 || y >= 15 {
+                None
+            } else {
+                self[x as usize][y as usize]
+            }
+        };
+
+        let mut new_move = m.clone();
+
+        // Expand forwards
+        let (x, y) = m.tiles.iter().min_by_key(|(pos, _tile)| pos).unwrap().0;
+        let (mut x, mut y) = (x as isize, y as isize);
+        while let Some(tile) = get(x + dx, y + dy) {
+            x += dx;
+            y += dy;
+            new_move.tiles.push(((x as usize, y as usize), tile));
+        }
+
+        // Expand backwards
+        let (x, y) = m.tiles.iter().max_by_key(|(pos, _tile)| pos).unwrap().0;
+        let (mut x, mut y) = (x as isize, y as isize);
+        while let Some(tile) = get(x - dx, y - dy) {
+            x -= dx;
+            y -= dy;
+            new_move.tiles.push(((x as usize, y as usize), tile));
+        }
+
+        new_move
+    }
+
+    /// Precondition: m is not a detached single letter
+    fn find_implied_moves(&self, m: &Move) -> (Move, Vec<Move>) {
+        assert!(!m.tiles.is_empty());
+
+        // Special case for 1-length move
+        if m.tiles.len() == 1 {
+            let m_vertical = self.expand_move(m, 1, 0);
+            let m_horizontal = self.expand_move(m, 0, 1);
+            let mut moves = vec![m_vertical, m_horizontal];
+            moves.retain(|m| m.tiles.len() > 1);
+            assert!(!moves.is_empty());
+            let main_word_move = moves.pop().unwrap();
+            (main_word_move, moves)
+        } else {
+            let ((inline_dx, inline_dy), (adjacent_dx, adjacent_dy)) = if m.is_horizontal() {
+                ((0, 1), (1, 0))
+            } else {
+                ((1, 0), (0, 1))
+            };
+
+            // Expand the main word
+            let main_word_move = self.expand_move(&m, inline_dx, inline_dy);
+
+            // Find all crossing words
+            let mut crossing_words = Vec::new();
+            let mut tmp_move = Move::default();
+            for t in m.tiles.iter().copied() {
+                tmp_move.tiles.clear();
+                tmp_move.tiles.push(t);
+                let crossing_move = self.expand_move(&tmp_move, adjacent_dx, adjacent_dy);
+                if crossing_move.tiles.len() > 1 {
+                    crossing_words.push(crossing_move);
+                }
+            }
+
+            (main_word_move, crossing_words)
+        }
     }
 
     /// Precondition: all positions used in `m` are free (`None`) in `self`.
@@ -261,7 +371,7 @@ impl Board {
     }
 
     fn is_empty(&self) -> bool {
-        *self == Board([[None; 15]; 15])
+        *self == Board::new()
     }
 }
 
@@ -274,7 +384,7 @@ pub struct Player {
 
 impl Player {
     fn has_tiles_to_play_move(&self, m: &Move) -> bool {
-        let mut player_tiles_count: HashMap<Tile, u8> = HashMap::new();
+        let mut player_tiles_count: HashMap<Tile, u8> = HashMap::with_capacity(self.tiles.len());
         for &t in &self.tiles {
             *player_tiles_count.entry(t).or_insert(0) += 1;
         }
@@ -386,12 +496,27 @@ impl Game {
 }
 
 static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
-    let rdr = BufReader::new(File::open(path).unwrap());
-    let words = rdr.lines().collect::<io::Result<Vec<String>>>().unwrap();
+    let reader;
 
-    debug_assert!(words.windows(2).all(|w| w[0] < w[1]));
-    debug_assert!(words
+    #[cfg(debug_assertions)]
+    {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
+        reader = std::fs::File::open(path).unwrap();
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        reader = &include_bytes!("../words.txt")[..];
+    }
+
+    let buf_reader = BufReader::new(reader);
+    let words = buf_reader
+        .lines()
+        .collect::<io::Result<Vec<String>>>()
+        .unwrap();
+
+    assert!(words.windows(2).all(|w| w[0] < w[1]));
+    assert!(words
         .iter()
         .all(|w| w.chars().all(|c| c.is_ascii_lowercase())));
 
