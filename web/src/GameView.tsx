@@ -15,7 +15,7 @@ const arrRemove = <T,>(arr: Array<T>, i: number): Array<T> => arr.filter((_val, 
 const applyMove = (board: BoardT, move: MoveT): BoardT => {
   const newBoard = structuredClone(board)
   for (const [[x, y], tile] of move.tiles)
-    newBoard[x][y] = tile
+    newBoard.tiles[x][y] = tile
   return newBoard
 }
 
@@ -29,7 +29,10 @@ const tilesOfName = (game: GameT, name: string | undefined): Array<TileT> => {
   return p ? structuredClone(p.tiles) : []
 }
 
-const scoreOfPlayer = (p: PlayerT): number => p.moves.reduce((score, move) => score + move.value, 0)
+const scoreOfPlayer = (p: PlayerT): number => 
+  p.moves.reduce((score, move) => score + 
+    move.word_values.reduce((subscore, word) => subscore + word[1], 0), 
+  0)
 
 export const GameView = ({ game, name, playMove }: GameViewProps) => {
   const [availableTiles, setAvailableTiles] = useState<Array<TileT>>(tilesOfName(game, name))

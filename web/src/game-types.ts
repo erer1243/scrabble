@@ -8,7 +8,10 @@ export type ModifierT = "DoubleLetter" | "TripleLetter" | "DoubleWord" | "Triple
 export type PositionT = [number, number];
 
 type Array15<T> = [T, T, T, T, T, T, T, T, T, T, T, T, T, T, T]
-export type BoardT = Array15<Array15<OptionT<TileT>>>
+export type BoardT = {
+  tiles: Array15<Array15<OptionT<TileT>>>
+  blank_fills: Array15<Array15<OptionT<TileT>>>
+}
 
 export type MoveT = {
   tiles: Array<[PositionT, TileT]>
@@ -16,13 +19,12 @@ export type MoveT = {
 
 export type InvalidMoveT = {
   explanation: string
-  relevant_squares: Array<PositionT>
+  positions: Array<PositionT>
 }
 
 export type PlayedMoveT = {
-  positions: Array<PositionT>
-  words: Array<string>
-  value: number
+  original_move: MoveT
+  word_values: Array<[string, number]>
 }
 
 export type PlayerT = {

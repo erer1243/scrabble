@@ -112,7 +112,7 @@ const App = () => {
     }
 
     case "Review": {
-      elems.push("Review screen now!")
+      elems.push(<h1 style={{ color: 'white '}}>Review screen now!</h1>)
       break;
     }
 
@@ -154,7 +154,7 @@ const DebugInfo = ({ data }: { data: Record<string, unknown> }) => {
           {label}: {stringify(val)}
         </pre>
       </li>)
-    list = <ul key={"xxx"} style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
+    list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
   }
 
   return (

@@ -7,23 +7,12 @@
 //! - <https://github.com/dwyl/english-words>
 //! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
+mod solve;
 mod std_impls;
 
-#[cfg(test)]
-mod tests;
-
-use arrayvec::ArrayVec;
-use itertools::Itertools;
-use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
-use std::{
-    collections::HashMap,
-    io::{self, BufRead, BufReader},
-    ops::Range,
-    slice,
-};
-
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, iter};
 
 #[rustfmt::skip]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -114,7 +103,7 @@ impl Move {
         self.tiles.iter().any(|(p, _)| *p == (7, 7))
     }
 
-    fn positions<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
+    fn positions(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.tiles.iter().map(|(p, _)| *p)
     }
 
@@ -132,8 +121,34 @@ impl Move {
         self.is_vertical() || self.is_horizontal()
     }
 
+    /// Precondition: self is a straight line (function won't panic, but the return value will be incorrect & meaningless)
+    fn is_contiguous(&self) -> bool {
+        fn dist((ax, ay): Position, (bx, by): Position) -> usize {
+            (((ax as isize) - (bx as isize)).abs() + ((ay as isize) - (by as isize)).abs()) as usize
+        }
+
+        self.sorted()
+            .tiles
+            .windows(2)
+            .all(|ts| dist(ts[0].0, ts[1].0) == 1)
+    }
+
     fn sort(&mut self) {
         self.tiles.sort_unstable_by_key(|t| t.0);
+    }
+
+    fn sorted(&self) -> Move {
+        let mut m = self.clone();
+        m.sort();
+        m
+    }
+
+    fn to_word(&self) -> String {
+        self.sorted()
+            .tiles
+            .into_iter()
+            .map(|(_, t)| t.as_char())
+            .collect()
     }
 }
 
@@ -156,222 +171,109 @@ impl InvalidMove {
 /// and was worth some number of points.
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayedMove {
-    pub positions: Vec<Position>,
-    pub words: Vec<String>,
-    pub value: u32,
+    original_move: Move,
+    word_values: Vec<(String, u32)>,
 }
 
-/// Includes the center as a double word modifier.
-pub static MODIFIERS: Lazy<HashMap<Position, Modifier>> = Lazy::new(|| {
-    type Positions = &'static [Position];
-    #[rustfmt::skip] const TRIPLE_WORDS: Positions = &[(0, 0), (0, 7), (0, 14), (7, 0), (7, 14), (14, 0), (14, 7), (14, 14)];
-    #[rustfmt::skip] const DOUBLE_WORDS: Positions = &[(7, 7), (1, 1), (2, 2), (3, 3), (4, 4), (10, 10), (11, 11), (12, 12), (13, 13), (1, 13), (2, 12), (3, 11), (4, 10), (13, 1), (12, 2), (11, 3), (10, 4)];
-    #[rustfmt::skip] const TRIPLE_LETTERS: Positions = &[(1, 5), (1, 9), (5, 1), (5, 5), (5, 9), (5, 13), (9, 1), (9, 5), (9, 9), (9, 13), (13, 5), (13, 9)];
-    #[rustfmt::skip] const DOUBLE_LETTERS: Positions = &[(0, 3), (0, 11), (3, 0), (11, 0), (14, 3), (14, 11), (3, 14), (11, 14), (2, 6), (2, 8), (3, 7), (6, 2), (8, 2), (7, 3), (6, 12), (8, 12), (7, 11), (12, 6), (12, 8), (11, 7), (6, 6), (6, 8), (8, 8), (8, 6)];
-
-    fn map(ps: Positions, m: Modifier) -> impl Iterator<Item = ((usize, usize), Modifier)> {
-        ps.iter().map(move |p| (*p, m))
+impl PlayedMove {
+    fn value(&self) -> u32 {
+        self.word_values.iter().map(|(_, value)| value).sum()
     }
-
-    let iter = map(TRIPLE_WORDS, Modifier::TripleWord)
-        .chain(map(DOUBLE_WORDS, Modifier::DoubleWord))
-        .chain(map(TRIPLE_LETTERS, Modifier::TripleLetter))
-        .chain(map(DOUBLE_LETTERS, Modifier::DoubleLetter));
-
-    HashMap::from_iter(iter)
-});
-
-#[derive(Clone, Copy, Debug, Serialize)]
-pub enum Modifier {
-    DoubleLetter,
-    TripleLetter,
-    DoubleWord,
-    TripleWord,
 }
 
 pub type Position = (usize, usize);
 
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-pub struct Board(pub [[Option<Tile>; 15]; 15]);
+pub struct Board {
+    tiles: [[Option<Tile>; 15]; 15],
+    blank_fills: [[Option<Tile>; 15]; 15],
+}
 
 impl Board {
     fn new() -> Self {
         Self::default()
     }
 
-    fn validate_and_score_move(&self, m: &Move) -> Result<PlayedMove, InvalidMove> {
-        if m.tiles.is_empty() {
-            return Err(InvalidMove::new("Empty move", vec![]));
-        }
-
-        if m.tiles.len() > 7 {
-            return Err(InvalidMove::new(
-                "More than 7 tiles played (impossible)",
-                vec![],
-            ));
-        }
-
-        if !m.is_straight_line() {
-            return Err(InvalidMove::new(
-                "That move is not a straight line",
-                m.positions(),
-            ));
-        }
-
-        if self.is_empty() {
-            if !m.crosses_center() {
-                return Err(InvalidMove::new(
-                    "The first move must play through the center",
-                    m.positions(),
-                ));
+    fn get_non_blank(&self, (x, y): Position) -> Option<Tile> {
+        self.tiles[x][y].map(|t| {
+            if t == Tile::Blank {
+                self.blank_fills[x][y].unwrap()
+            } else {
+                t
             }
-
-            if m.tiles.len() == 1 {
-                return Err(InvalidMove::new(
-                    "The first move must be at least two letters",
-                    m.positions(),
-                ));
-            }
-        } else {
-            let overlaps: Vec<_> = m
-                .positions()
-                .filter(|(x, y)| self[*x][*y].is_some())
-                .collect();
-            if !overlaps.is_empty() {
-                return Err(InvalidMove::new(
-                    "Some spaces in that move are already covered (impossible)",
-                    overlaps,
-                ));
-            }
-        }
-
-        // TODO
-        Ok(PlayedMove {
-            positions: vec![],
-            words: vec![],
-            value: 6,
         })
     }
 
-    fn score_move(&self, m: &Move) -> u32 {
-        use Modifier::*;
-
-        let mut score = 0;
-        let mut word_multiplier = 1;
-
-        for ((x, y), t) in &m.tiles {
-            let modifier = if self[*x][*y].is_some() {
-                None
-            } else {
-                MODIFIERS.get(&(*x, *y))
-            };
-
-            let letter_multiplier = match modifier {
-                None => 1,
-                Some(DoubleLetter) => 2,
-                Some(TripleLetter) => 3,
-                Some(DoubleWord) => {
-                    word_multiplier *= 2;
-                    1
-                }
-                Some(TripleWord) => {
-                    word_multiplier *= 3;
-                    1
-                }
-            };
-
-            score += t.point_value() * letter_multiplier;
-        }
-
-        score * word_multiplier
-    }
-
-    /// Extend the given move to include tiles before and after it
-    /// eg PAIN[TER] -> [PAINTER]
-    fn expand_move(&self, m: &Move, dx: isize, dy: isize) -> Move {
-        let get = |x: isize, y: isize| {
-            if x < 0 || y < 0 || x >= 15 || y >= 15 {
-                None
-            } else {
-                self[x as usize][y as usize]
-            }
-        };
-
-        let mut new_move = m.clone();
-
-        // Expand forwards
-        let (x, y) = m.tiles.iter().min_by_key(|(pos, _tile)| pos).unwrap().0;
-        let (mut x, mut y) = (x as isize, y as isize);
-        while let Some(tile) = get(x + dx, y + dy) {
-            x += dx;
-            y += dy;
-            new_move.tiles.push(((x as usize, y as usize), tile));
-        }
-
-        // Expand backwards
-        let (x, y) = m.tiles.iter().max_by_key(|(pos, _tile)| pos).unwrap().0;
-        let (mut x, mut y) = (x as isize, y as isize);
-        while let Some(tile) = get(x - dx, y - dy) {
-            x -= dx;
-            y -= dy;
-            new_move.tiles.push(((x as usize, y as usize), tile));
-        }
-
-        new_move
-    }
-
-    /// Precondition: m is not a detached single letter
-    fn find_implied_moves(&self, m: &Move) -> (Move, Vec<Move>) {
-        assert!(!m.tiles.is_empty());
-
-        // Special case for 1-length move
-        if m.tiles.len() == 1 {
-            let m_vertical = self.expand_move(m, 1, 0);
-            let m_horizontal = self.expand_move(m, 0, 1);
-            let mut moves = vec![m_vertical, m_horizontal];
-            moves.retain(|m| m.tiles.len() > 1);
-            assert!(!moves.is_empty());
-            let main_word_move = moves.pop().unwrap();
-            (main_word_move, moves)
-        } else {
-            let ((inline_dx, inline_dy), (adjacent_dx, adjacent_dy)) = if m.is_horizontal() {
-                ((0, 1), (1, 0))
-            } else {
-                ((1, 0), (0, 1))
-            };
-
-            // Expand the main word
-            let main_word_move = self.expand_move(&m, inline_dx, inline_dy);
-
-            // Find all crossing words
-            let mut crossing_words = Vec::new();
-            let mut tmp_move = Move::default();
-            for t in m.tiles.iter().copied() {
-                tmp_move.tiles.clear();
-                tmp_move.tiles.push(t);
-                let crossing_move = self.expand_move(&tmp_move, adjacent_dx, adjacent_dy);
-                if crossing_move.tiles.len() > 1 {
-                    crossing_words.push(crossing_move);
-                }
-            }
-
-            (main_word_move, crossing_words)
-        }
-    }
-
-    /// Precondition: all positions used in `m` are free (`None`) in `self`.
-    fn apply_move(&mut self, m: &Move) {
+    /// Precondition: blank_fills.len() == number of blank tiles in m
+    fn with_move_applied(&self, m: &Move, blank_fills: &[Tile]) -> Board {
         let mut new_board = *self;
+        let mut blank_i = 0;
         for ((x, y), tile) in m.tiles.iter().copied() {
-            let t = &mut new_board[x][y];
-            assert!(t.is_none());
-            *t = Some(tile);
+            new_board.tiles[x][y] = Some(tile);
+
+            if tile == Tile::Blank {
+                new_board.blank_fills[x][y] = Some(blank_fills[blank_i]);
+                blank_i += 1;
+            }
         }
-        *self = new_board;
+        new_board
     }
 
     fn is_empty(&self) -> bool {
         *self == Board::new()
+    }
+
+    fn play_move(&mut self, m: &Move) -> Result<PlayedMove, InvalidMove> {
+        solve::validate_move(self, m)?;
+        let (expanded_move, crossing_moves) = solve::expand_move(self, m);
+
+        if crossing_moves.is_empty() && !self.is_empty() {
+            return Err(InvalidMove::new("That move is disconnected", m.positions()));
+        }
+
+        let blank_fills = solve::solve_for_blanks(m, &crossing_moves)?;
+
+        let moves = iter::once(&expanded_move).chain(crossing_moves.iter());
+
+        // We need to score the move before applying it to the board
+        // because scoring takes into account which tiles are new and
+        // which are from some prior move that we're playing off of
+        let scores: Vec<_> = moves.clone().map(|m| solve::score_move(self, m)).collect();
+
+        let new_board = self.with_move_applied(m, &blank_fills);
+
+        // Create strings out of the moves after we apply the move to the board so
+        // we can take advantage of Board::get_non_blank
+        let move_words: Vec<_> = moves
+            .map(|m| {
+                (
+                    m,
+                    m.sorted()
+                        .tiles
+                        .iter()
+                        .map(|(pos, _)| new_board.get_non_blank(*pos).unwrap().as_char())
+                        .collect::<String>(),
+                )
+            })
+            .collect();
+
+        for (m, w) in &move_words {
+            if !solve::is_word(w) {
+                return Err(InvalidMove::new(
+                    format!("'{w}' is not a word"),
+                    m.positions(),
+                ));
+            }
+        }
+
+        let word_values = move_words.into_iter().map(|(_, w)| w).zip(scores).collect();
+
+        *self = new_board;
+
+        Ok(PlayedMove {
+            original_move: m.clone(),
+            word_values,
+        })
     }
 }
 
@@ -406,7 +308,7 @@ impl Player {
     }
 
     fn score(&self) -> u32 {
-        self.moves.iter().map(|pm| pm.value).sum()
+        self.moves.iter().map(|pm| pm.value()).sum()
     }
 
     fn refill_tiles_from(&mut self, tile_bag: &mut Vec<Tile>) {
@@ -453,11 +355,10 @@ impl Game {
             ));
         }
 
-        let played_move = self.board.validate_and_score_move(m)?;
+        let played_move = self.board.play_move(m)?;
         player.moves.push(played_move);
         player.remove_played_tiles(m);
         player.refill_tiles_from(&mut self.tile_bag);
-        self.board.apply_move(m);
         self.whose_turn += 1;
         self.whose_turn %= self.players.len();
         Ok(())
@@ -493,205 +394,4 @@ impl Game {
     fn game_finished_by_tiles(&self) -> bool {
         self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
     }
-}
-
-static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
-    let reader;
-
-    #[cfg(debug_assertions)]
-    {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
-        reader = std::fs::File::open(path).unwrap();
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        reader = &include_bytes!("../words.txt")[..];
-    }
-
-    let buf_reader = BufReader::new(reader);
-    let words = buf_reader
-        .lines()
-        .collect::<io::Result<Vec<String>>>()
-        .unwrap();
-
-    assert!(words.windows(2).all(|w| w[0] < w[1]));
-    assert!(words
-        .iter()
-        .all(|w| w.chars().all(|c| c.is_ascii_lowercase())));
-
-    words
-});
-
-fn tiles_to_bytes(tiles: &[Tile]) -> &[u8] {
-    unsafe { std::mem::transmute(tiles) }
-}
-
-fn is_word(word: &[Tile]) -> bool {
-    WORDLIST
-        .binary_search_by(|w| w.as_bytes().cmp(tiles_to_bytes(word)))
-        .is_ok()
-}
-
-fn solve_for_blanks(
-    segments: &[&[Tile]],
-    crossing_words: &[Option<(&[Tile], &[Tile])>],
-) -> Option<Vec<Tile>> {
-    assert!(segments.len() > 1);
-    assert!(crossing_words.len() == segments.len() - 1);
-
-    let n_blanks = segments.len() - 1;
-    let mut fills: Vec<Tile> = Vec::with_capacity(n_blanks);
-    let mut buf: ArrayVec<Tile, 32> = ArrayVec::new();
-
-    macro_rules! partial_word {
-        () => { partial_word!(. None) };
-        ($extra:expr) => { partial_word!(. Some(& $extra)) };
-        (. $extra:expr) => {{
-            let iter = segments
-                .iter()
-                .copied()
-                .interleave_shortest(fills.iter().chain($extra).map(std::slice::from_ref))
-                .flatten()
-                .copied();
-            buf.clear();
-            buf.extend(iter);
-            buf.as_slice()
-        }};
-    }
-
-    macro_rules! crossing_word {
-        ($i:expr, $fill:expr) => {{
-            let (a, b) = crossing_words[$i].unwrap();
-            buf.clear();
-            buf.try_extend_from_slice(a).unwrap();
-            buf.push($fill);
-            buf.try_extend_from_slice(b).unwrap();
-            buf.as_slice()
-        }};
-    }
-
-    macro_rules! implies {
-        ($a:expr, $b:expr) => {
-            !$a || $b
-        };
-    }
-
-    let mut tile = Tile::A;
-    while fills.len() < n_blanks {
-        let m_range = word_prefix_range(partial_word!(tile));
-        let cwi = fills.len();
-        let cw = crossing_words[cwi];
-
-        if m_range.is_some()
-            && implies!(cw.is_some(), is_word(crossing_word!(cwi, tile)))
-            && implies!(fills.len() + 1 == n_blanks, is_word(partial_word!(tile)))
-        {
-            fills.push(tile);
-            tile = Tile::A;
-        } else {
-            loop {
-                match tile.successor() {
-                    Some(next_tile) => {
-                        tile = next_tile;
-                        break;
-                    }
-                    None => tile = fills.pop()?,
-                }
-            }
-        }
-    }
-
-    Some(fills)
-}
-
-fn word_prefix_range(prefix: &[Tile]) -> Option<Range<usize>> {
-    let prefix_bytes = unsafe { slice::from_raw_parts(prefix.as_ptr().cast(), prefix.len()) };
-    binary_search_for_prefix_range(&WORDLIST, prefix_bytes)
-}
-
-fn binary_search_for_prefix_range<B>(arr: &[B], prefix: &[u8]) -> Option<Range<usize>>
-where
-    B: AsRef<[u8]>,
-{
-    let start = binary_search_for_prefix_range_start(arr, prefix)?;
-    let end = start + 1 + binary_search_for_prefix_range_end(&arr[start..], prefix);
-    Some(Range { start, end })
-}
-
-fn binary_search_for_prefix_range_start<B>(arr: &[B], prefix: &[u8]) -> Option<usize>
-where
-    B: AsRef<[u8]>,
-{
-    use std::cmp::Ordering::*;
-
-    let mut l = 0;
-    let mut r = arr.len() - 1;
-
-    while l <= r {
-        let m = (l + r) / 2;
-        let m_word = arr[m].as_ref();
-
-        match m_word.cmp(prefix) {
-            Less => l = m + 1,
-            Greater => {
-                // This check allows the least word that still has the given prefix to satisfy.
-                // Normal binary search is only searching for an exact match to the prefix,
-                // but given ["aa", "bb", "cc"] and "b", we still want to find "bb".
-                if m_word.starts_with(prefix) && (m == 0 || arr[m - 1].as_ref() < prefix) {
-                    return Some(m);
-                }
-
-                // If prefix is less than the entire list, then eventually m = 0 but m_word > prefix,
-                // so this would subtract 1 from 0usize and underflow.
-                r = m.checked_sub(1)?;
-            }
-            Equal => return Some(m),
-        }
-    }
-
-    None
-}
-
-/// Precondition: arr contains at least one element that is prefixed by `prefix`
-/// i.e. `binary_search_for_prefix_range_start(arr, prefix)` returned `Some(..)`.
-fn binary_search_for_prefix_range_end<B>(arr: &[B], prefix: &[u8]) -> usize
-where
-    B: AsRef<[u8]>,
-{
-    use std::cmp::Ordering::*;
-
-    let mut l = 0;
-    let mut r = arr.len() - 1;
-    let last = r;
-
-    while l <= r {
-        let m = (l + r) / 2;
-        let m_word = arr[m].as_ref();
-        let found_end = || m == last || !arr[m + 1].as_ref().starts_with(prefix);
-
-        match m_word.cmp(prefix) {
-            Less => l = m + 1,
-            Greater => {
-                if m_word.starts_with(prefix) {
-                    if found_end() {
-                        return m;
-                    } else {
-                        l = m + 1;
-                    }
-                } else {
-                    r = m - 1;
-                }
-            }
-            Equal => {
-                if found_end() {
-                    return m;
-                } else {
-                    l = m + 1;
-                }
-            }
-        }
-    }
-
-    unreachable!("precondition unmet or bug in implementation");
 }

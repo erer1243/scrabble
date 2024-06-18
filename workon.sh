@@ -1,6 +1,6 @@
 #!/bin/sh -xe
 cd "$(dirname "$0")"
-(cd web && npm run dev -- --host >/dev/null 2>&1) &
+(cd web && npm install && npm run dev -- --host >/dev/null 2>&1) &
 NPM="$!"
 cargo watch --exec run --watch game --watch server --watch Cargo.toml --watch Cargo.lock --clear &
 CARGO="$!"

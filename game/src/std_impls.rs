@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    ops::{Index, IndexMut},
-};
+use std::fmt::Display;
 
 use crate::{Board, Game, Tile};
 
@@ -11,27 +8,13 @@ impl Display for Tile {
     }
 }
 
-impl Index<usize> for Board {
-    type Output = [Option<Tile>; 15];
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
-    }
-}
-
-impl IndexMut<usize> for Board {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
-    }
-}
-
 impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "┌──────────────────────────────┐")?;
         for i in 0..15 {
             write!(f, "│")?;
             for j in 0..15 {
-                match self[i][j] {
+                match self.tiles[i][j] {
                     Some(t) => write!(f, "{t}")?,
                     None => write!(f, " ")?,
                 }
