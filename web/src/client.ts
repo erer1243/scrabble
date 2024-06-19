@@ -7,7 +7,7 @@ export type TableT = {
   state: GameStateT
 }
 
-export type GameStateT = "Setup" | "Running" | "Review"
+export type GameStateT = "Setup" | "Running"
 
 export type ServerMessageT = 
 | { Table: TableT }

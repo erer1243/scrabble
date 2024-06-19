@@ -1,10 +1,13 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{Index, IndexMut},
+};
 
-use crate::{Board, Game, Tile};
+use crate::{Board, BoardTile, Game, Tile};
 
 impl Display for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\u{0332}", self.as_char())
+        write!(f, "{}", self.as_char().to_ascii_uppercase())
     }
 }
 
@@ -14,8 +17,8 @@ impl Display for Board {
         for i in 0..15 {
             write!(f, "│")?;
             for j in 0..15 {
-                match self.tiles[i][j] {
-                    Some(t) => write!(f, "{t}")?,
+                match self[i][j] {
+                    Some(t) => write!(f, "{}", t.as_tile())?,
                     None => write!(f, " ")?,
                 }
                 write!(f, "·")?;
@@ -24,6 +27,20 @@ impl Display for Board {
         }
         write!(f, "└──────────────────────────────┘")?;
         Ok(())
+    }
+}
+
+impl Index<usize> for Board {
+    type Output = [Option<BoardTile>; 15];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for Board {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }
 

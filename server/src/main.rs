@@ -2,6 +2,7 @@ use std::{
     fmt::Display,
     net::SocketAddr,
     sync::{atomic::AtomicUsize, Arc},
+    time::Duration,
 };
 
 use anyhow::{bail, ensure, Result};
@@ -134,7 +135,7 @@ impl Connection {
                             update_everyone = false;
                             self.name = Some(name);
                         } else {
-                            ensure!(table.game.players.len() < 5, "Game already full");
+                            ensure!(table.game.players().len() < 5, "Game already full");
                             table.game.add_player(name.clone());
                             self.name = Some(name);
                         }
@@ -143,7 +144,6 @@ impl Connection {
                         ensure!(table.game.has_player(&name), "No player with given name");
                         self.name = Some(name);
                     }
-                    GameState::Review => bail!("Can't join game in review"),
                 }
             }
             ClientMessage::PlayMove(m) => {
@@ -153,7 +153,7 @@ impl Connection {
                 let name = self.name.as_ref().unwrap();
                 ensure!(table.game.is_players_turn(name), "It's not your turn");
                 match table.game.play_move(&m) {
-                    Ok(()) => (),
+                    Ok(_) => (),
                     Err(im) => {
                         update_everyone = false;
                         self.ws.send_msg(ServerMessage::InvalidMove(&im)).await?;
@@ -216,7 +216,6 @@ impl Table {
 enum GameState {
     Setup,
     Running,
-    Review,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -237,21 +236,29 @@ enum ClientMessage {
 impl WebSocket {
     async fn recv_message(&mut self) -> Result<ClientMessage> {
         loop {
-            let msg = match self.recv().await {
-                Some(Ok(m)) => m,
-                Some(Err(e)) => bail!(e),
-                None => bail!("Client already disconnected"),
-            };
-            match msg {
-                Message::Text(json) => {
-                    let msg = serde_json::from_str(&json)?;
-                    log!("Message recv: {msg:?}");
-                    return Ok(msg);
+            tokio::select! {
+                msg_res = self.recv() => {
+                    let msg = match msg_res {
+                        Some(Ok(m)) => m,
+                        Some(Err(e)) => bail!(e),
+                        None => bail!("Client already disconnected"),
+                    };
+                    match msg {
+                        Message::Text(json) => {
+                            let msg = serde_json::from_str(&json)?;
+                            log!("Message recv: {msg:?}");
+                            break Ok(msg);
+                        }
+                        Message::Close(frame) => bail!("Close frame received: {frame:?}"),
+                        Message::Binary(_) => bail!("Received binary message"),
+                        Message::Ping(data) => self.pong(data).await?,
+                        Message::Pong(_) => {}
+                    }
                 }
-                Message::Close(frame) => bail!("Close frame received: {frame:?}"),
-                Message::Binary(_) => bail!("Received binary message"),
-                Message::Ping(data) => self.pong(data).await?,
-                Message::Pong(_) => {}
+
+                _ = tokio::time::sleep(Duration::from_secs(30)) => {
+                    self.pong(vec![]).await?;
+                }
             }
         }
     }

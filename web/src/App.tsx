@@ -35,9 +35,9 @@ const randomName = (): string => {
   return name
 }
 
-const getCookieName = () => localStorage["name"]
-const setCookieName = (name: string) => localStorage["name"] = name
-const unsetCookieName = () => localStorage.removeItem("name")
+const getStoredName = () => localStorage["name"]
+const setStoredName = (name: string) => localStorage["name"] = name
+const delStoredName = () => localStorage.removeItem("name")
 
 const App = () => {
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, sockOptions)
@@ -66,6 +66,7 @@ const App = () => {
         setTable(msg.Table)
       } else if ("InvalidMove" in msg) {
         setInvalidMove(msg.InvalidMove)
+        alert(msg.InvalidMove.explanation)
       } else {
         alert("Unhandled ServerMessage (see console)")
         console.error("Unhandled ServerMessage", msg);
@@ -75,25 +76,25 @@ const App = () => {
 
   useEffect(() => {
     if (name !== undefined) {
-      setCookieName(name)
+      setStoredName(name)
       sendMessage({ "JoinWithName": name })
     }
   }, [name, sendMessage])
 
   useEffect(() => {
-    const cookieName = getCookieName()
-    if (name === undefined && table !== undefined && cookieName !== undefined) {
-      if (table.game.players.some(p => p.name == cookieName))
-        // We have a cookie name and it's in the game, so use it
-        setName(cookieName)
+    const storedName = getStoredName()
+    if (name === undefined && table !== undefined && storedName !== undefined) {
+      if (table.game.players.some(p => p.name == storedName))
+        // We have a stored name and it's in the game, so use it
+        setName(storedName)
       else
-        // We have a cookie name but it's not in the game, so it's outdated and needs to be removed
-        unsetCookieName()
+        // We have a stored name but it's not in the game, so it's outdated and needs to be removed
+        delStoredName()
     }
   }, [table, name])
 
   useEffect(() => {
-    if (debugMode && table?.state === "Setup" && name === undefined && getCookieName() === undefined)
+    if (debugMode && table?.state === "Setup" && name === undefined && getStoredName() === undefined)
       setName(randomName())
   }, [table?.state, name])
 
@@ -101,23 +102,18 @@ const App = () => {
   switch (table?.state) {
     case "Setup": {
       const startGame = () => sendMessage("StartGame")
-      elems.push(<SetupView game={table.game} joinGame={setName} name={name} startGame={startGame} />)
+      elems.push(<SetupView key="setup" game={table.game} joinGame={setName} name={name} startGame={startGame} />)
       break;
     }
 
     case "Running": {
       const playMove = (move: MoveT) => sendMessage({ "PlayMove": move })
-      elems.push(<GameView game={table.game} name={name} playMove={playMove} />)
-      break;
-    }
-
-    case "Review": {
-      elems.push(<h1 style={{ color: 'white '}}>Review screen now!</h1>)
+      elems.push(<GameView key="game" game={table.game} name={name} playMove={playMove} />)
       break;
     }
 
     case undefined: {
-      elems.push(<h1 style={{ color: 'white' }}>Not connected</h1>)
+      elems.push(<h1 key="notconnected" style={{ color: 'white' }}>Not connected</h1>)
       break;
     }
   }
@@ -126,13 +122,13 @@ const App = () => {
     const debugData = {
       "Socket is": statuses[readyState],
       name,
-      cookieName: getCookieName(),
+      storedName: getStoredName(),
       table,
       lastJsonMessage,
       invalidMove,
     }
-    elems.push(<br />)
-    elems.push(<DebugInfo data={debugData} />)
+    elems.push(<br key="debugbreak" />)
+    elems.push(<DebugInfo key="debuginfo" data={debugData} />)
   }
   return elems
 }

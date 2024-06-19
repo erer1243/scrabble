@@ -1,20 +1,19 @@
 export type OptionT<T> = T | null;
 
-export type TileT = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
-  | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'Blank'
+export type LetterT = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
+                    | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' 
+export type TileT = LetterT | 'Blank'
+export type BoardTileT = LetterT | { 'Blank': LetterT }
 
 export type ModifierT = "DoubleLetter" | "TripleLetter" | "DoubleWord" | "TripleWord"
 
 export type PositionT = [number, number];
 
 type Array15<T> = [T, T, T, T, T, T, T, T, T, T, T, T, T, T, T]
-export type BoardT = {
-  tiles: Array15<Array15<OptionT<TileT>>>
-  blank_fills: Array15<Array15<OptionT<TileT>>>
-}
+export type BoardT = Array15<Array15<OptionT<BoardTileT>>>
 
 export type MoveT = {
-  tiles: Array<[PositionT, TileT]>
+  tiles: Array<[PositionT, BoardTileT]>
 }
 
 export type InvalidMoveT = {

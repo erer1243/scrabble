@@ -12,7 +12,7 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
   for (let x = 0; x < 15; x++) {
     const rowSquares: Array<React.JSX.Element> = [];
     for (let y = 0; y < 15; y++) {
-      const tile = board.tiles[x][y]
+      const tile = board[x][y]
       const modifier = modifiers[x][y]
 
       let elem;

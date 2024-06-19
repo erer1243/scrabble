@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Sources:
 //! - <https://hasbro-new.custhelp.com/app/answers/detail/a_id/55/~/what-is-the-total-face-value-of-all-the-scrabble-tiles%3F>
 //! - <https://hasbro-new.custhelp.com/app/answers/detail/a_id/19/related/1>
@@ -10,26 +8,28 @@
 mod solve;
 mod std_impls;
 
+use forr::forr;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, iter};
+use std::{borrow::Cow, collections::HashMap, iter};
 
-#[rustfmt::skip]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum Tile {
-     Blank = b'*', A = b'a', B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+macro_rules! tile_enum {
+    ( $(#[$attr:meta])* $name:ident { $(A = $a:expr,)? $(Blank $($blank:tt)+)? }) => {
+        $(#[$attr])*
+        pub enum $name {
+            A $(= $a)?, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+            $(Blank $($blank)+)?
+        }
+    };
 }
 
-impl Tile {
-    fn from_ascii(n: u8) -> Option<Self> {
-        if !n.is_ascii_lowercase() {
-            None
-        } else {
-            Some(unsafe { std::mem::transmute(n) })
-        }
-    }
+tile_enum! {
+    #[repr(u8)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+    Letter { A = b'a', }
+}
 
+impl Letter {
     fn as_ascii(self) -> u8 {
         self as u8
     }
@@ -37,9 +37,24 @@ impl Tile {
     fn as_char(self) -> char {
         char::from(self.as_ascii())
     }
+}
 
-    fn successor(self) -> Option<Self> {
-        Self::from_ascii(self.as_ascii() + 1)
+tile_enum! {
+    #[repr(u8)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    Tile {
+        A = b'a',
+        Blank = b'*'
+    }
+}
+
+impl Tile {
+    fn as_ascii(self) -> u8 {
+        self as u8
+    }
+
+    fn as_char(self) -> char {
+        char::from(self.as_ascii())
     }
 
     fn point_value(self) -> u32 {
@@ -56,7 +71,7 @@ impl Tile {
         }
     }
 
-    fn number_in_game(self) -> u32 {
+    fn number_in_game(self) -> usize {
         use Tile::*;
         match self {
             J | K | Q | X | Z => 1,
@@ -70,41 +85,74 @@ impl Tile {
         }
     }
 
-    fn iter_alphabet() -> impl Iterator<Item = Tile> {
-        (b'a'..=b'z').map(|c| Tile::from_ascii(c).unwrap())
-    }
+    // fn iter_alphabet() -> impl Iterator<Item = Tile> {
+    //     (b'a'..=b'z').map(|c| Tile::from_ascii(c).unwrap())
+    // }
 
     fn iter_game_count() -> impl Iterator<Item = Tile> {
-        let mut cur_tile = Tile::A;
-        let mut cur_tile_count = cur_tile.number_in_game();
-        std::iter::from_fn(move || {
-            if cur_tile_count == 0 {
-                cur_tile = if cur_tile == Tile::Z {
-                    Tile::Blank
-                } else {
-                    cur_tile.successor()?
-                };
-                cur_tile_count = cur_tile.number_in_game();
+        forr! { $tile:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank] $:
+            iter::empty()
+                $(.chain(iter::repeat(Self::$tile).take(Self::$tile.number_in_game())))*
+        }
+    }
+}
+
+tile_enum! {
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+    BoardTile {
+        Blank(Letter)
+    }
+}
+
+impl BoardTile {
+    fn as_tile(self) -> Tile {
+        forr! { $letter:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z] $:
+            match self {
+                BoardTile::Blank { .. } => Tile::Blank,
+                $(Self::$letter => Tile::$letter,)*
             }
-            cur_tile_count -= 1;
-            Some(cur_tile)
-        })
+        }
+    }
+
+    fn as_letter(self) -> Letter {
+        forr! { $letter:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z] $:
+            match self {
+                BoardTile::Blank(fill) => fill,
+                $(Self::$letter => Letter::$letter,)*
+            }
+        }
     }
 }
 
 /// An attempt to play a word which may or may not be valid
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Move {
-    tiles: Vec<(Position, Tile)>,
+    tiles: Vec<(Position, BoardTile)>,
+
+    #[serde(skip)]
+    sorted: bool,
 }
 
 impl Move {
+    pub fn new(tiles: Vec<(Position, BoardTile)>) -> Self {
+        let mut m = Self {
+            tiles,
+            sorted: false,
+        };
+        m.sort();
+        m
+    }
+
     fn crosses_center(&self) -> bool {
         self.tiles.iter().any(|(p, _)| *p == (7, 7))
     }
 
     fn positions(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.tiles.iter().map(|(p, _)| *p)
+    }
+
+    fn contains_position(&self, pos: Position) -> bool {
+        self.positions().any(|p| p == pos)
     }
 
     fn is_horizontal(&self) -> bool {
@@ -133,21 +181,26 @@ impl Move {
             .all(|ts| dist(ts[0].0, ts[1].0) == 1)
     }
 
-    fn sort(&mut self) {
-        self.tiles.sort_unstable_by_key(|t| t.0);
+    fn sorted(&self) -> Cow<Move> {
+        if self.sorted {
+            Cow::Borrowed(self)
+        } else {
+            let mut m = self.clone();
+            m.sort();
+            Cow::Owned(m)
+        }
     }
 
-    fn sorted(&self) -> Move {
-        let mut m = self.clone();
-        m.sort();
-        m
+    fn sort(&mut self) {
+        self.tiles.sort_unstable_by_key(|t| t.0);
+        self.sorted = true;
     }
 
     fn to_word(&self) -> String {
         self.sorted()
             .tiles
-            .into_iter()
-            .map(|(_, t)| t.as_char())
+            .iter()
+            .map(|(_, t)| t.as_letter().as_char())
             .collect()
     }
 }
@@ -184,37 +237,17 @@ impl PlayedMove {
 pub type Position = (usize, usize);
 
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-pub struct Board {
-    tiles: [[Option<Tile>; 15]; 15],
-    blank_fills: [[Option<Tile>; 15]; 15],
-}
+pub struct Board([[Option<BoardTile>; 15]; 15]);
 
 impl Board {
     fn new() -> Self {
         Self::default()
     }
 
-    fn get_non_blank(&self, (x, y): Position) -> Option<Tile> {
-        self.tiles[x][y].map(|t| {
-            if t == Tile::Blank {
-                self.blank_fills[x][y].unwrap()
-            } else {
-                t
-            }
-        })
-    }
-
-    /// Precondition: blank_fills.len() == number of blank tiles in m
-    fn with_move_applied(&self, m: &Move, blank_fills: &[Tile]) -> Board {
+    fn with_move_applied(&self, m: &Move) -> Board {
         let mut new_board = *self;
-        let mut blank_i = 0;
         for ((x, y), tile) in m.tiles.iter().copied() {
-            new_board.tiles[x][y] = Some(tile);
-
-            if tile == Tile::Blank {
-                new_board.blank_fills[x][y] = Some(blank_fills[blank_i]);
-                blank_i += 1;
-            }
+            new_board[x][y] = Some(tile);
         }
         new_board
     }
@@ -227,46 +260,43 @@ impl Board {
         solve::validate_move(self, m)?;
         let (expanded_move, crossing_moves) = solve::expand_move(self, m);
 
-        if crossing_moves.is_empty() && !self.is_empty() {
+        if expanded_move.tiles.len() == m.tiles.len()
+            && crossing_moves.is_empty()
+            && !self.is_empty()
+        {
             return Err(InvalidMove::new("That move is disconnected", m.positions()));
         }
 
-        let blank_fills = solve::solve_for_blanks(m, &crossing_moves)?;
-
-        let moves = iter::once(&expanded_move).chain(crossing_moves.iter());
+        if !m.positions().all(|p| expanded_move.contains_position(p)) {
+            return Err(InvalidMove::new(
+                "That move is not contiguous",
+                m.positions(),
+            ));
+        }
 
         // We need to score the move before applying it to the board
         // because scoring takes into account which tiles are new and
         // which are from some prior move that we're playing off of
-        let scores: Vec<_> = moves.clone().map(|m| solve::score_move(self, m)).collect();
-
-        let new_board = self.with_move_applied(m, &blank_fills);
-
-        // Create strings out of the moves after we apply the move to the board so
-        // we can take advantage of Board::get_non_blank
-        let move_words: Vec<_> = moves
-            .map(|m| {
-                (
-                    m,
-                    m.sorted()
-                        .tiles
-                        .iter()
-                        .map(|(pos, _)| new_board.get_non_blank(*pos).unwrap().as_char())
-                        .collect::<String>(),
-                )
-            })
+        let moves: Vec<_> = iter::once(&expanded_move)
+            .chain(crossing_moves.iter())
+            .map(|m| (m, m.to_word(), solve::score_move(self, m)))
             .collect();
 
-        for (m, w) in &move_words {
-            if !solve::is_word(w) {
+        let new_board = self.with_move_applied(m);
+
+        for (m, word, _score) in &moves {
+            if !solve::is_word(word) {
                 return Err(InvalidMove::new(
-                    format!("'{w}' is not a word"),
+                    format!("'{word}' is not a word"),
                     m.positions(),
                 ));
             }
         }
 
-        let word_values = move_words.into_iter().map(|(_, w)| w).zip(scores).collect();
+        let word_values = moves
+            .into_iter()
+            .map(|(_, word, value)| (word, value))
+            .collect();
 
         *self = new_board;
 
@@ -291,7 +321,7 @@ impl Player {
             *player_tiles_count.entry(t).or_insert(0) += 1;
         }
         for (_, t) in &m.tiles {
-            match player_tiles_count.get_mut(t) {
+            match player_tiles_count.get_mut(&t.as_tile()) {
                 Some(0) => return false,
                 Some(n) => *n -= 1,
                 None => return false,
@@ -301,8 +331,8 @@ impl Player {
     }
 
     fn remove_played_tiles(&mut self, m: &Move) {
-        for (_, t) in &m.tiles {
-            let i = self.tiles.iter().position(|t_| t == t_).unwrap();
+        for (_, bt) in &m.tiles {
+            let i = self.tiles.iter().position(|t| bt.as_tile() == *t).unwrap();
             self.tiles.swap_remove(i);
         }
     }
@@ -320,10 +350,10 @@ impl Player {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Game {
-    pub board: Board,
-    pub tile_bag: Vec<Tile>,
-    pub players: Vec<Player>,
-    pub whose_turn: usize,
+    board: Board,
+    tile_bag: Vec<Tile>,
+    players: Vec<Player>,
+    whose_turn: usize,
 }
 
 impl Game {
@@ -345,7 +375,8 @@ impl Game {
         }
     }
 
-    pub fn play_move(&mut self, m: &Move) -> Result<(), InvalidMove> {
+    pub fn play_move(&mut self, m: &Move) -> Result<&PlayedMove, InvalidMove> {
+        let n_players = self.players.len();
         let player = &mut self.players[self.whose_turn];
 
         if !player.has_tiles_to_play_move(m) {
@@ -360,8 +391,8 @@ impl Game {
         player.remove_played_tiles(m);
         player.refill_tiles_from(&mut self.tile_bag);
         self.whose_turn += 1;
-        self.whose_turn %= self.players.len();
-        Ok(())
+        self.whose_turn %= n_players;
+        Ok(player.moves.last().unwrap())
     }
 
     fn index_of_player(&self, name: &str) -> Option<usize> {
@@ -370,6 +401,10 @@ impl Game {
             .enumerate()
             .find(|(_, p)| p.name == name)
             .map(|(i, _)| i)
+    }
+
+    fn player(&self, name: &str) -> Option<&Player> {
+        self.index_of_player(name).map(|i| &self.players[i])
     }
 
     pub fn is_players_turn(&self, name: &str) -> bool {
@@ -391,7 +426,61 @@ impl Game {
         })
     }
 
-    fn game_finished_by_tiles(&self) -> bool {
-        self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
+    pub fn players(&self) -> &[Player] {
+        &self.players
+    }
+
+    fn current_player(&self) -> &Player {
+        &self.players[self.whose_turn]
+    }
+
+    fn current_player_mut(&mut self) -> &mut Player {
+        &mut self.players[self.whose_turn]
+    }
+
+    // fn game_finished_by_tiles(&self) -> bool {
+    //     self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
+    // }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn known_game_constants() {
+        assert_eq!(Tile::iter_game_count().count(), 100);
+        assert_eq!(
+            Tile::iter_game_count().map(Tile::point_value).sum::<u32>(),
+            187
+        );
+        assert_eq!(Board::default().0.len(), 15);
+        assert_eq!(Board::default()[0].len(), 15);
+    }
+
+    #[test]
+    fn two_player_game_test() {
+        let mut g = Game::new();
+        g.add_player("Alice".to_string());
+        g.add_player("Bob".to_string());
+        g.start_game();
+
+        macro_rules! play_move {
+            ($(($x:expr, $y:expr, $t:ident $($body:tt)?)),*) => {{
+                let p = g.current_player_mut();
+                $(
+                    p.tiles.pop().unwrap();
+                    p.tiles.insert(0, Tile::$t);
+                )*
+                g.play_move(&Move::new(vec![$((($x, $y), BoardTile::$t $($body)? )),*]))
+            }}
+        }
+
+        play_move![(0, 0, T), (0, 1, O), (0, 2, P)].unwrap_err();
+
+        play_move![(7, 6, O), (7, 7, A), (7, 8, T)].unwrap();
+        play_move![(5, 8, N), (6, 8, U)].unwrap();
+
+        play_move![(0, 0, T), (0, 1, O), (0, 2, P)].unwrap_err();
     }
 }
