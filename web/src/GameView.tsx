@@ -74,6 +74,9 @@ export const GameView = ({ game, name, playMove }: GameViewProps) => {
     setMove({ tiles: [] })
   }, [resetMarker, game, name]);
 
+  const onClickTileBarTile = (selection: number) =>
+    setSelectedTile(selection !== selectedTile ? selection : undefined)
+
   const onClickResetTiles = () => setResetMarker(!resetMarker)
   const onClickSubmitMove = () => playMove(move)
   const disableSubmit = game.whose_turn !== getPlayer(game, name)?.index
@@ -101,7 +104,7 @@ export const GameView = ({ game, name, playMove }: GameViewProps) => {
       <GameViewHeader game={game} name={name} />
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
-        <TileBar tiles={availableTiles} onClickTile={setSelectedTile} selectedTile={selectedTile} />
+        <TileBar tiles={availableTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
         <button className="button" onClick={onClickResetTiles}>Reset tiles</button>
         <button className="button" onClick={onClickSubmitMove} disabled={disableSubmit}>Submit Move</button>
       </div>
