@@ -169,18 +169,6 @@ impl Move {
         self.is_vertical() || self.is_horizontal()
     }
 
-    /// Precondition: self is a straight line (function won't panic, but the return value will be incorrect & meaningless)
-    fn is_contiguous(&self) -> bool {
-        fn dist((ax, ay): Position, (bx, by): Position) -> usize {
-            (((ax as isize) - (bx as isize)).abs() + ((ay as isize) - (by as isize)).abs()) as usize
-        }
-
-        self.sorted()
-            .tiles
-            .windows(2)
-            .all(|ts| dist(ts[0].0, ts[1].0) == 1)
-    }
-
     fn sorted(&self) -> Cow<Move> {
         if self.sorted {
             Cow::Borrowed(self)
@@ -287,7 +275,7 @@ impl Board {
         for (m, word, _score) in &moves {
             if !solve::is_word(word) {
                 return Err(InvalidMove::new(
-                    format!("'{word}' is not a word"),
+                    format!("'{}' is not a word", word.to_ascii_uppercase()),
                     m.positions(),
                 ));
             }
@@ -403,9 +391,9 @@ impl Game {
             .map(|(i, _)| i)
     }
 
-    fn player(&self, name: &str) -> Option<&Player> {
-        self.index_of_player(name).map(|i| &self.players[i])
-    }
+    // fn player(&self, name: &str) -> Option<&Player> {
+    //     self.index_of_player(name).map(|i| &self.players[i])
+    // }
 
     pub fn is_players_turn(&self, name: &str) -> bool {
         self.index_of_player(name).unwrap() == self.whose_turn
@@ -430,10 +418,11 @@ impl Game {
         &self.players
     }
 
-    fn current_player(&self) -> &Player {
-        &self.players[self.whose_turn]
-    }
+    // fn current_player(&self) -> &Player {
+    //     &self.players[self.whose_turn]
+    // }
 
+    #[cfg(test)]
     fn current_player_mut(&mut self) -> &mut Player {
         &mut self.players[self.whose_turn]
     }

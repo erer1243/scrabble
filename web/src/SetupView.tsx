@@ -8,10 +8,23 @@ export type SetupViewProps = {
   startGame: () => void
 }
 
+const randomName = (): string => {
+  const randomElem = (s: string): string => s[Math.trunc(Math.random() * s.length)]
+  const consonants = "bcdfghjklmnpqrstvwxyz"
+  const vowels = "aeiou"
+
+  const lengthSeed = Math.random()
+  let name = randomElem(consonants).toUpperCase();
+  for (let i = 0; lengthSeed < (1 / 1.7 ** i) && i <= 5; i++)
+    name += randomElem(vowels) + randomElem(consonants)
+
+  return name
+}
+
 export const SetupView = ({ game, name, joinGame, startGame }: SetupViewProps) => {
   let joinGameArea
   if (name === undefined) {
-    const onClickButton = () => {
+    const onClickJoin = () => {
       const input = (document.getElementById("name-input")! as HTMLInputElement).value.trim()
       if (input)
         joinGame(input)
@@ -19,10 +32,13 @@ export const SetupView = ({ game, name, joinGame, startGame }: SetupViewProps) =
         alert("Enter a name")
     }
     joinGameArea = (
-      <div className="setup-view-join-game-area">
-        <input className="setup-view-name-input" id="name-input" placeholder="Name"></input>
-        <button className="setup-view-join-button" onClick={onClickButton}>Join Game</button>
-      </div>
+      <>
+        <div className="name-input-area">
+          <input id="name-input" placeholder="Name"></input>
+          <button onClick={onClickJoin}>Join Game</button>
+          <button onClick={() => joinGame(randomName())}>Random Name</button>
+        </div>
+      </>
     )
   }
 
@@ -43,14 +59,14 @@ export const SetupView = ({ game, name, joinGame, startGame }: SetupViewProps) =
   }
 
   const startGameButtonDisabled = game.players.length < 2
-  const startGameButton = <button onClick={startGame} disabled={startGameButtonDisabled}>Start The Game</button>
-  
+
   return (
     <div className="setup-view">
       <h1>Game setup</h1>
       {joinGameArea}
-      <br/>
-      {startGameButton}
+      <br />
+      <br />
+      <button onClick={startGame} disabled={startGameButtonDisabled}>Start The Game</button>
       <h2>Players:</h2>
       {playerList}
     </div>

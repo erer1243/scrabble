@@ -1,9 +1,8 @@
+use super::{Board, BoardTile, Game, Tile};
 use std::{
     fmt::Display,
     ops::{Index, IndexMut},
 };
-
-use crate::{Board, BoardTile, Game, Tile};
 
 impl Display for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

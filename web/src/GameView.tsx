@@ -33,7 +33,6 @@ const tilesOfName = (game: GameT, name: string | undefined): Array<TileT> => {
 const scoreOfPlayer = (p: PlayerT): number =>
   p.moves.reduce((score, move) => score + move.word_values.reduce((subscore, word) => subscore + word[1], 0), 0)
 
-
 const isBlank = (t: BoardTileT | TileT): boolean => t === 'Blank' || (typeof t === 'object' && 'Blank' in t)
 
 const tileToBoardTile = (t: TileT): BoardTileT | null => {

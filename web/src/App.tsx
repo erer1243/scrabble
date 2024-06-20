@@ -20,20 +20,7 @@ const sockOptions = {
   shouldReconnect: () => true,
 }
 
-const debugMode = true
-
-const randomName = (): string => {
-  const randomElem = (s: string): string => s[Math.trunc(Math.random() * s.length)]
-  const consonants = "bcdfghjklmnpqrstvwxyz"
-  const vowels = "aeiou"
-
-  const lengthSeed = Math.random()
-  let name = randomElem(consonants).toUpperCase();
-  for (let i = 0; lengthSeed < (1 / 1.7**i) && i <= 5; i++)
-    name += randomElem(vowels) + randomElem(consonants)
-  
-  return name
-}
+const debugMode = import.meta.env.DEV
 
 const getStoredName = () => localStorage["name"]
 const setStoredName = (name: string) => localStorage["name"] = name
@@ -92,11 +79,6 @@ const App = () => {
         delStoredName()
     }
   }, [table, name])
-
-  useEffect(() => {
-    if (debugMode && table?.state === "Setup" && name === undefined && getStoredName() === undefined)
-      setName(randomName())
-  }, [table?.state, name])
 
   const elems = [];
   switch (table?.state) {

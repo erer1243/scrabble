@@ -3,7 +3,7 @@ use std::{
     io::{self, BufRead, BufReader},
 };
 
-use crate::{Board, BoardTile, InvalidMove, Move, Position};
+use super::{Board, BoardTile, InvalidMove, Move, Position};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 
