@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { Board } from "./Board"
-import { TileBar } from "./TileBar"
+import { Board } from "./gameview/Board"
+import { TileBar } from "./gameview/TileBar"
 import { BoardT, BoardTileT, GameT, LetterT, MoveT, PlayerT, PositionT, TileT } from "./game-types"
 import "./GameView.scss"
 

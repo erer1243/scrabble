@@ -1,3 +1,5 @@
+mod game;
+
 use std::{
     fmt::Display,
     net::SocketAddr,
