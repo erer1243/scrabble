@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { ClientMessageT, ServerMessageT, TableT, serverAddr } from './client'
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { GameView } from './GameView'
-import { InvalidMoveT, MoveT } from './game-types'
+import { InvalidMoveT, MoveT, TileT } from './game-types'
 import { SetupView } from './SetupView'
+import { TileBar } from './gameview/TileBar'
 
 const statuses = {
   [ReadyState.CONNECTING]: 'connecting',
@@ -90,7 +91,8 @@ const App = () => {
 
     case "Running": {
       const playMove = (move: MoveT) => sendMessage({ "PlayMove": move })
-      elems.push(<GameView key="game" game={table.game} name={name} playMove={playMove} />)
+      const exchangeTiles = () => sendMessage("ExchangeTiles")
+      elems.push(<GameView key="game" game={table.game} name={name} playMove={playMove} exchangeTiles={exchangeTiles} />)
       break;
     }
 
@@ -120,7 +122,7 @@ const DebugInfo = ({ data }: { data: Record<string, unknown> }) => {
   const white = { color: "white" }
   const blacklist = ["board", "tile_bag", "tiles"]
 
-  let list
+  let debugPane
   if (show) {
     const stringify = (x: unknown) => {
       return JSON.stringify(x, (k, v) => blacklist.includes(k) ? "(redacted)" : v, 1)
@@ -132,13 +134,23 @@ const DebugInfo = ({ data }: { data: Record<string, unknown> }) => {
           {label}: {stringify(val)}
         </pre>
       </li>)
-    list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
+    const list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
+
+    debugPane = (
+      <>
+        {list}
+        <TileBar tiles={["A", "B", "C", "D", "E", "F", "G"]} onClickTile={() => {}} selectedTile={undefined} />
+        <TileBar tiles={["H", "I", "J", "K", "L", "M", "N"]} onClickTile={() => {}} selectedTile={undefined} />
+        <TileBar tiles={["O", "P", "Q", "R", "S", "T", "U"]} onClickTile={() => {}} selectedTile={undefined} />
+        <TileBar tiles={["V", "W", "X", "Y", "Z", "Blank", { "Blank": "X" } as unknown as TileT]} onClickTile={() => {}} selectedTile={undefined} />
+      </>
+    )
   }
 
   return (
     <>
       <button onClick={() => setShow(!show)}>debug info</button>
-      {list}
+      {debugPane}
     </>
   )
 }

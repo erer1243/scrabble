@@ -131,27 +131,27 @@ impl Connection {
                 );
 
                 let table = table!(mut);
-                match table.state {
-                    GameState::Setup => {
-                        if table.game.has_player(&name) {
-                            update_everyone = false;
-                            self.name = Some(name);
-                        } else {
-                            ensure!(table.game.players().len() < 5, "Game already full");
+                if table.game.has_player(&name) {
+                    update_everyone = false;
+                    self.name = Some(name);
+                } else {
+                    match table.state {
+                        GameState::Setup => {
+                            ensure!(table.game.players().len() <= 4, "Game already full");
                             table.game.add_player(name.clone());
                             self.name = Some(name);
                         }
-                    }
-                    GameState::Running => {
-                        ensure!(table.game.has_player(&name), "No player with given name");
-                        self.name = Some(name);
+                        GameState::Running => {
+                            ensure!(table.game.has_player(&name), "No player with given name");
+                            self.name = Some(name);
+                        }
                     }
                 }
             }
             ClientMessage::PlayMove(m) => {
                 let table = table!(mut);
                 ensure!(table.state == GameState::Running, "Game is not running");
-                ensure!(self.name.is_some(), "Have not joined the game yet");
+                ensure!(self.name.is_some(), "Not in the game");
                 let name = self.name.as_ref().unwrap();
                 ensure!(table.game.is_players_turn(name), "It's not your turn");
                 match table.game.play_move(&m) {
@@ -161,6 +161,15 @@ impl Connection {
                         self.ws.send_msg(ServerMessage::InvalidMove(&im)).await?;
                     }
                 }
+            }
+            ClientMessage::ExchangeTiles => {
+                let table = table!(mut);
+                ensure!(table.state == GameState::Running, "Game is not running");
+                ensure!(self.name.is_some(), "Not in the game");
+                let name = self.name.as_ref().unwrap();
+                ensure!(table.game.is_players_turn(name), "It's not your turn");
+
+                table.game.exchange_tiles();
             }
         }
 
@@ -232,6 +241,7 @@ enum ClientMessage {
     StartGame,
     JoinWithName(String),
     PlayMove(Move),
+    ExchangeTiles,
 }
 
 #[extend::ext]

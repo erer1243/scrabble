@@ -383,6 +383,16 @@ impl Game {
         Ok(player.moves.last().unwrap())
     }
 
+    pub fn exchange_tiles(&mut self) {
+        let player = &mut self.players[self.whose_turn];
+        self.tile_bag.extend_from_slice(&player.tiles);
+        self.tile_bag.shuffle(&mut rand::thread_rng());
+        player.tiles.clear();
+        player.refill_tiles_from(&mut self.tile_bag);
+        self.whose_turn += 1;
+        self.whose_turn %= self.players.len();
+    }
+
     fn index_of_player(&self, name: &str) -> Option<usize> {
         self.players
             .iter()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { Board } from "./gameview/Board"
 import { TileBar } from "./gameview/TileBar"
+import { Header } from "./gameview/Header"
 import { BoardT, BoardTileT, GameT, LetterT, MoveT, PlayerT, PositionT, TileT } from "./game-types"
 import "./GameView.scss"
 
@@ -8,6 +9,7 @@ export type GameViewProps = {
   game: GameT
   name: string | undefined
   playMove: (move: MoveT) => void
+  exchangeTiles: () => void
 }
 
 const arrAppend = <T,>(arr: Array<T>, val: T): Array<T> => [...arr, val]
@@ -29,9 +31,6 @@ const tilesOfName = (game: GameT, name: string | undefined): Array<TileT> => {
   const p = getPlayer(game, name)
   return p ? structuredClone(p.tiles) : []
 }
-
-const scoreOfPlayer = (p: PlayerT): number =>
-  p.moves.reduce((score, move) => score + move.word_values.reduce((subscore, word) => subscore + word[1], 0), 0)
 
 const isBlank = (t: BoardTileT | TileT): boolean => t === 'Blank' || (typeof t === 'object' && 'Blank' in t)
 
@@ -62,7 +61,7 @@ const tileToBoardTile = (t: TileT): BoardTileT | null => {
 
 const boardTileToTile = (bt: BoardTileT): TileT => isBlank(bt) ? 'Blank' : bt as TileT
 
-export const GameView = ({ game, name, playMove }: GameViewProps) => {
+export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps) => {
   const [availableTiles, setAvailableTiles] = useState<Array<TileT>>(tilesOfName(game, name))
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
   const [move, setMove] = useState<MoveT>({ tiles: [] })
@@ -79,9 +78,8 @@ export const GameView = ({ game, name, playMove }: GameViewProps) => {
 
   const onClickResetTiles = () => setResetMarker(!resetMarker)
   const onClickSubmitMove = () => playMove(move)
-  const disableSubmit = game.whose_turn !== getPlayer(game, name)?.index
+  const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index
   const board = applyMove(game.board, move)
-
   const onClickBoardSquare = (x: number, y: number, occupied: boolean) => {
     if (selectedTile !== undefined && !occupied) {
       const boardTile = tileToBoardTile(availableTiles[selectedTile]);
@@ -98,40 +96,24 @@ export const GameView = ({ game, name, playMove }: GameViewProps) => {
       setSelectedTile(undefined)
     }
   }
+  const onClickExchangeTiles = () => {
+    if (confirm("Swap your tiles for new ones?"))
+      exchangeTiles()
+  }
 
   return (
     <div className="game-view">
-      <GameViewHeader game={game} name={name} />
+      <Header game={game} name={name} />
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
         <TileBar tiles={availableTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
-        <button className="button" onClick={onClickResetTiles}>Reset tiles</button>
-        <button className="button" onClick={onClickSubmitMove} disabled={disableSubmit}>Submit Move</button>
+        <button className="button" onClick={onClickResetTiles}>Restore Tiles</button>
+        <button className="button" onClick={onClickSubmitMove} disabled={notYourTurn}>Submit Move</button>
+        <button className="button" onClick={onClickExchangeTiles} disabled={notYourTurn}>Exchange Tiles</button>
       </div>
-      <Board board={board} onClickSquare={onClickBoardSquare} />
-    </div>
-  )
-}
-
-const GameViewHeader = ({ game, name }: Pick<GameViewProps, "game" | "name">) => {
-  const curPlayer = game.players[game.whose_turn]
-  const scores = game.players.map((p, i) =>
-    <div className="row" key={i}>
-      <p className="name">{p.name}</p>
-      <p className="score">{scoreOfPlayer(p)}</p>
-    </div>
-  )
-
-  return (
-    <div className="header">
-      <div className="scores">
-        <div className="row"><p className="name">Player</p><p className="score">Score</p></div>
-        {scores}
-      </div>
-      <div className="whose-turn">
-        <h3>It's {curPlayer.name == name ? "your" : `${curPlayer.name}'s`} turn</h3>
+      <div className="board-center">
+        <Board board={board} onClickSquare={onClickBoardSquare} />
       </div>
     </div>
   )
 }
-

@@ -18,3 +18,4 @@ export type ClientMessageT =
 | "StartGame"
 | { JoinWithName: string }
 | { PlayMove: MoveT }
+| "ExchangeTiles"

@@ -18,7 +18,7 @@ static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
 
     #[cfg(not(debug_assertions))]
     {
-        reader = &include_bytes!("../words.txt")[..];
+        reader = &include_bytes!("../../words.txt")[..];
     }
 
     let buf_reader = BufReader::new(reader);

@@ -6,28 +6,48 @@ export type TileProps = {
   tile: TileT | BoardTileT
 };
 
-export const Tile = ({ tile }: TileProps) => {
+const nudges: Record<string, string> = {
+  "D": " nudge-left-2",
+  "G": " nudge-left-2",
+  "H": " nudge-left-2",
+  "I": " nudge-right-3",
+  "J": " nudge-right-4 nudge-up-2",
+  "M": " nudge-left-4",
+  "N": " nudge-left-2",
+  "O": " nudge-left-2",
+  "Q": " nudge-left-3 nudge-up-2",
+  "U": " nudge-left-1",
+  "W": " nudge-left-4",
+  "Z": " nudge-up-1",
+}
 
-  let tileLetter, pointValue, tileLetterClass = "tile-letter";
+export const Tile = ({ tile }: TileProps) => {
+  let tileLetter: string
+  let pointValue: number
+  let tileLetterClass: string = "letter"
 
   if (typeof tile === 'string') {
-    if (tile === 'Blank') {
+    if (tile === 'Blank')
       tileLetter = ""
-    } else {
+    else
       tileLetter = tile
-    }
     pointValue = tileValues[tile]
   } else if ('Blank' in tile) {
     tileLetter = tile['Blank']
     pointValue = tileValues['Blank']
-    tileLetterClass += " tile-filled-blank"
+    tileLetterClass += " filled-blank"
+  } else {
+    console.error(`<Tile tile=${tile} /> is unhandled`)
+    return
   }
+
+  tileLetterClass += nudges[tileLetter] ?? ""
 
   return (
     <div className="tile">
       <p className={tileLetterClass}>{tileLetter}</p>
-      <p className="tile-point-value">{pointValue}</p>
-      <img className="tile-background" draggable="false" src={background} />
+      <p className="point-value">{pointValue}</p>
+      <img className="background" draggable="false" src={background} />
     </div>
   )
 }
