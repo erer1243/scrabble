@@ -1,2 +1,9 @@
+- Show move history on GameView
+- Review after game is done
+- End game after one player runs out of tiles, or if all vote to end it
 - Reveal modifiers beneath tiles when hovered over on board
 - Show move errors and highlight relevant tiles on board after submitting a move
+- Allow rejoining a running game, maybe with some authentication system that's not an account
+
+- Save matches to disk
+- Run multiple matches simultaneously
