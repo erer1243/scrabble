@@ -12,16 +12,16 @@ pub static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
 
     #[cfg(debug_assertions)]
     {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("words.txt.zst");
         reader = std::fs::File::open(path).unwrap();
     }
 
     #[cfg(not(debug_assertions))]
     {
-        reader = &include_bytes!("../../words.txt")[..];
+        reader = &include_bytes!("../../words.txt.zst")[..];
     }
 
-    let buf_reader = BufReader::new(reader);
+    let buf_reader = BufReader::new(zstd::Decoder::new(reader).unwrap());
     let words = buf_reader
         .lines()
         .collect::<io::Result<Vec<String>>>()
