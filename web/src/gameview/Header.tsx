@@ -7,7 +7,14 @@ export type GameViewHeaderProps = {
 }
 
 const scoreOfPlayer = (p: PlayerT): number =>
-  p.moves.reduce((score, move) => score + move.word_values.reduce((subscore, word) => subscore + word[1], 0), 0)
+  p.turns.reduce((score, turn): number => {
+    if (turn === "TilesExchanged") {
+      return 0;
+    } else {
+      const value = turn.PlayedMove.word_values.reduce((subscore, word) => subscore + word[1], 0);
+      return score + value;
+    }
+  }, 0)
 
 export const Header = ({ game, name }: GameViewHeaderProps) => {
   const curPlayer = game.players[game.whose_turn]

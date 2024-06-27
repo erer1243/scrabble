@@ -26,10 +26,14 @@ export type PlayedMoveT = {
   word_values: Array<[string, number]>
 }
 
+export type TurnT = 
+  | { PlayedMove: PlayedMoveT }
+  | "TilesExchanged"
+
 export type PlayerT = {
   name: string
   tiles: Array<TileT>
-  moves: Array<PlayedMoveT>
+  turns: Array<TurnT>
 }
 
 export type GameT = {
@@ -47,7 +51,7 @@ export const tileValues: Record<TileT, number> = {
 }
 
 const modifierMap: Record<string, ModifierT> = {
-  "7,7": "DoubleLetter",
+  "7,7": "DoubleWord",
   "2,8": "DoubleLetter",
   "0,0": "TripleWord",
   "6,2": "DoubleLetter",

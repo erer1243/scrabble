@@ -1,3 +1,4 @@
+mod encoding;
 mod game;
 
 use std::{
@@ -26,6 +27,9 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    // encoding::main();
+    // return;
+
     let g = Arc::new(GlobalState::new());
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
     axum::serve(

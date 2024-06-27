@@ -7,7 +7,7 @@ use super::{Board, BoardTile, InvalidMove, Move, Position};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 
-static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
+pub static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
     let reader;
 
     #[cfg(debug_assertions)]

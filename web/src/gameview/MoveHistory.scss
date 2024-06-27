@@ -1,0 +1,29 @@
+.move-history {
+  margin-top: 1em;
+  width: 100%;
+  background: lightyellow;
+  height: 10em;
+  border-radius: 2px 2px 20px 20px;
+
+
+  &>.title-div {
+    display: flex;
+    place-content: center;
+
+    &>.title {
+      margin-top: 0.2em;
+      margin-bottom: 0;
+    }
+  }
+
+  &>.list {
+    margin: 0 1em 0 1em;
+    border: 1px solid black;
+    border-radius: 3px;
+    overflow: auto;
+
+    height: 7em;
+
+    &>.item {}
+  }
+}

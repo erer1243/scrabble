@@ -4,6 +4,7 @@ import { TileBar } from "./gameview/TileBar"
 import { Header } from "./gameview/Header"
 import { BoardT, BoardTileT, GameT, LetterT, MoveT, PlayerT, PositionT, TileT } from "./game-types"
 import "./GameView.scss"
+import { MoveHistory } from "./gameview/MoveHistory"
 
 export type GameViewProps = {
   game: GameT
@@ -114,6 +115,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       <div className="board-center">
         <Board board={board} onClickSquare={onClickBoardSquare} />
       </div>
+      <MoveHistory game={game} />
     </div>
   )
 }

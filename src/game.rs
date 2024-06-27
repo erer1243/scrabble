@@ -5,7 +5,7 @@
 //! - <https://github.com/dwyl/english-words>
 //! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
-mod solve;
+pub mod solve;
 mod std_impls;
 
 use forr::forr;
@@ -295,11 +295,26 @@ impl Board {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+enum Turn {
+    PlayedMove(PlayedMove),
+    TilesExchanged,
+}
+
+impl Turn {
+    fn value(&self) -> u32 {
+        match self {
+            Turn::PlayedMove(pm) => pm.value(),
+            Turn::TilesExchanged => 0,
+        }
+    }
+}
+
 #[derive(Default, Clone, Debug, Serialize)]
 pub struct Player {
-    pub name: String,
-    pub tiles: Vec<Tile>,
-    pub moves: Vec<PlayedMove>,
+    name: String,
+    tiles: Vec<Tile>,
+    turns: Vec<Turn>,
 }
 
 impl Player {
@@ -326,7 +341,7 @@ impl Player {
     }
 
     fn score(&self) -> u32 {
-        self.moves.iter().map(|pm| pm.value()).sum()
+        self.turns.iter().map(|pm| pm.value()).sum()
     }
 
     fn refill_tiles_from(&mut self, tile_bag: &mut Vec<Tile>) {
@@ -375,18 +390,23 @@ impl Game {
         }
 
         let played_move = self.board.play_move(m)?;
-        player.moves.push(played_move);
+        player.turns.push(Turn::PlayedMove(played_move));
         player.remove_played_tiles(m);
         player.refill_tiles_from(&mut self.tile_bag);
         self.whose_turn += 1;
         self.whose_turn %= n_players;
-        Ok(player.moves.last().unwrap())
+
+        let Some(Turn::PlayedMove(pm)) = player.turns.last() else {
+            unreachable!()
+        };
+        Ok(pm)
     }
 
     pub fn exchange_tiles(&mut self) {
         let player = &mut self.players[self.whose_turn];
         self.tile_bag.extend_from_slice(&player.tiles);
         self.tile_bag.shuffle(&mut rand::thread_rng());
+        player.turns.push(Turn::TilesExchanged);
         player.tiles.clear();
         player.refill_tiles_from(&mut self.tile_bag);
         self.whose_turn += 1;
