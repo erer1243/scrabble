@@ -3,50 +3,49 @@
 .board {
   background-color: lightgoldenrodyellow;
   width: fit-content;
-}
 
-.board-row {
-  display: flex;
-}
+  &>.row {
+    display: flex;
 
-.board-square {
-  width: tile.$tile-width;
-  height: tile.$tile-width;
-  border: 1.5px solid brown;
-}
+    &>.square {
+      width: tile.$tile-width;
+      height: tile.$tile-width;
+      border: 1.5px solid brown;
 
-.empty-square {
-  width: 100%;
-  height: 100%;
-}
+      &>.empty {
+        width: 100%;
+        height: 100%;
+      }
 
-.modifier-square {
-  display: flex;
-  text-align: center;
-  place-items: center;
+      &>.modifier {
+        display: flex;
+        text-align: center;
+        place-items: center;
 
-}
+        &>.modifier-text {
+          margin: 0;
+          overflow-wrap: break-word;
+          font-size: 0.7em;
+          font-weight: 500;
+          line-height: 1em;
+        }
+      }
 
-.modifier-text {
-  margin: 0;
-  overflow-wrap: break-word;
-  font-size: 0.7em;
-  font-weight: 500;
-  line-height: 1em;
-}
+      &>.double-word {
+        background-color: pink;
+      }
 
-.double-word {
-  background-color: pink;
-}
+      &>.triple-word {
+        background-color: red;
+      }
 
-.triple-word {
-  background-color: red;
-}
+      &>.double-letter {
+        background-color: deepskyblue;
+      }
 
-.double-letter {
-  background-color: deepskyblue;
-}
-
-.triple-letter {
-  background-color: aqua;
+      &>.triple-letter {
+        background-color: aqua;
+      }
+    }
+  }
 }

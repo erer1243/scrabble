@@ -18,8 +18,10 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
       let elem;
       let isFilled = false;
       if (tile) {
-        elem = <Tile tile={tile} />
         isFilled = true;
+        elem = (
+          <Tile tile={tile} />
+        )
       } else if (modifier) {
         const [modifierText, modifierClassName] = {
           "DoubleLetter": ["Double Letter Score", "double-letter"],
@@ -28,7 +30,7 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
           "TripleWord": ["Triple Word Score", "triple-word"],
         }[modifier]
         elem = (
-          <div className={`empty-square modifier-square ${modifierClassName}`}>
+          <div className={`empty modifier ${modifierClassName}`}>
             <p className="modifier-text">{modifierText}</p>
           </div>
         )
@@ -37,14 +39,14 @@ export const Board = ({ board, onClickSquare }: BoardProps) => {
       }
 
       rowSquares[y] = (
-        <div className="board-square" onClick={() => onClickSquare(x, y, isFilled)} key={`board-square-${y}`}>
+        <div className="square" onClick={() => onClickSquare(x, y, isFilled)} key={`board-square-${y}`}>
           {elem}
         </div>
       )
     }
 
     rows[x] = (
-      <div className="board-row" key={`row-${x}`}>
+      <div className="row" key={`row-${x}`}>
         {rowSquares}
       </div>
     )
