@@ -1,18 +1,21 @@
 #!/bin/sh -xe
-cd "$(dirname "$0")"/..
-
-cd web
-npm run build
-npm run preview -- --host >/dev/null 2>&1 &
-NPM1="$!"
-
-npm run dev >/dev/null 2>&1 &
-NPM2="$!"
-
-cd ..
-cargo build --release
-./target/release/server &
-SRV="$!"
-
-trap '{ kill $NPM1; kill $SRV; kill $NPM2; } >/dev/null 2>&1' EXIT INT
-wait
+if [ "$(hostname)" = uncle ]; then
+  if [ "$TMUX" ]; then
+    cd "$HOME"/scrabble
+    ./server &
+    SRV=$!
+    cd dist
+    python -m http.server 4173 &
+    WEB=$!
+    trap 'kill $SRV; kill $WEB' EXIT
+    wait
+  else
+    if ! (tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -q '^scrabble$'); then
+      tmux new-session -s scrabble "$(realpath "$0")"
+    else
+      tmux attach-session -t scrabble
+    fi
+  fi
+else
+  ssh -t uncle.onet './scrabble/run.sh'
+fi
