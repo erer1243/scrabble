@@ -9,7 +9,7 @@ export type GameViewHeaderProps = {
 const scoreOfPlayer = (p: PlayerT): number =>
   p.turns.reduce((score, turn): number => {
     if (turn === "TilesExchanged") {
-      return 0;
+      return score;
     } else {
       const value = turn.PlayedMove.word_values.reduce((subscore, word) => subscore + word[1], 0);
       return score + value;
