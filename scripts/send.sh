@@ -9,6 +9,8 @@ npm run build &
 cd ..
 
 wait
-rsync -av ./target/release/server uncle.onet:scrabble/server
-rsync -av ./web/dist/ uncle.onet:scrabble/dist/
-rsync -av ./scripts/run.sh uncle.onet:scrabble/run.sh
+ssh -Nf -o ControlMaster=yes -o ControlPath="ssh-%C" uncle.onet
+rsync -e 'ssh -o ControlPath="ssh-%C"' -av ./target/release/server uncle.onet:scrabble/server
+rsync -e 'ssh -o ControlPath="ssh-%C"' -av ./web/dist/ uncle.onet:scrabble/dist/
+rsync -e 'ssh -o ControlPath="ssh-%C"' -av ./scripts/run.sh uncle.onet:scrabble/run.sh
+ssh -O exit -o ControlPath="ssh-%C" uncle.onet
