@@ -378,7 +378,7 @@ impl Game {
         }
     }
 
-    pub fn play_move(&mut self, m: &Move) -> Result<&PlayedMove, InvalidMove> {
+    pub fn play_move(&mut self, m: &Move) -> Result<(), InvalidMove> {
         let n_players = self.players.len();
         let player = &mut self.players[self.whose_turn];
 
@@ -396,10 +396,7 @@ impl Game {
         self.whose_turn += 1;
         self.whose_turn %= n_players;
 
-        let Some(Turn::PlayedMove(pm)) = player.turns.last() else {
-            unreachable!()
-        };
-        Ok(pm)
+        Ok(())
     }
 
     pub fn exchange_tiles(&mut self) {

@@ -27,9 +27,6 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    // encoding::main();
-    // return;
-
     let g = Arc::new(GlobalState::new());
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
     axum::serve(
@@ -55,7 +52,7 @@ tokio::task_local! {
 
 macro_rules! log {
     ($($x:tt)*) => {
-        println!("[{}] {}", CID.get(), format_args!($($x)*))
+        CID.with(|cid| println!("[{}] {}", cid, format_args!($($x)*)))
     };
 }
 
