@@ -27,6 +27,7 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    println!("Scrabble server listening on port 2222");
     let g = Arc::new(GlobalState::new());
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
     axum::serve(
