@@ -27,17 +27,16 @@ export const Tile = ({ tile }: TileProps) => {
   let tileLetterClass: string = "letter"
 
   if (typeof tile === 'string') {
-    if (tile === 'Blank')
-      tileLetter = ""
-    else
-      tileLetter = tile
+    // TileT
+    tileLetter = (tile === 'Blank') ? "" : tile
     pointValue = tileValues[tile]
   } else if ('Blank' in tile) {
+    // BoardTileT
     tileLetter = tile['Blank']
     pointValue = tileValues['Blank']
     tileLetterClass += " filled-blank"
   } else {
-    console.error(`<Tile tile=${tile} /> is unhandled`)
+    console.error('impossible')
     return
   }
 

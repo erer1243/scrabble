@@ -6,12 +6,17 @@
 //! - <https://www.hasbro.com/common/instruct/Scrabble_(2003).pdf>
 
 pub mod solve;
-mod std_impls;
 
 use forr::forr;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::HashMap, iter};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt::Display,
+    iter,
+    ops::{Index, IndexMut},
+};
 
 macro_rules! tile_enum {
     ( $(#[$attr:meta])* $name:ident { $(A = $a:expr,)? $(Blank $($blank:tt)+)? }) => {
@@ -217,9 +222,9 @@ pub struct PlayedMove {
 }
 
 impl PlayedMove {
-    fn value(&self) -> u32 {
-        self.word_values.iter().map(|(_, value)| value).sum()
-    }
+    // fn value(&self) -> u32 {
+    //     self.word_values.iter().map(|(_, value)| value).sum()
+    // }
 }
 
 pub type Position = (usize, usize);
@@ -302,12 +307,12 @@ enum Turn {
 }
 
 impl Turn {
-    fn value(&self) -> u32 {
-        match self {
-            Turn::PlayedMove(pm) => pm.value(),
-            Turn::TilesExchanged => 0,
-        }
-    }
+    // fn value(&self) -> u32 {
+    //     match self {
+    //         Turn::PlayedMove(pm) => pm.value(),
+    //         Turn::TilesExchanged => 0,
+    //     }
+    // }
 }
 
 #[derive(Default, Clone, Debug, Serialize)]
@@ -340,9 +345,9 @@ impl Player {
         }
     }
 
-    fn score(&self) -> u32 {
-        self.turns.iter().map(|pm| pm.value()).sum()
-    }
+    // fn score(&self) -> u32 {
+    //     self.turns.iter().map(|pm| pm.value()).sum()
+    // }
 
     fn refill_tiles_from(&mut self, tile_bag: &mut Vec<Tile>) {
         while self.tiles.len() < 7 && !tile_bag.is_empty() {
@@ -457,6 +462,32 @@ impl Game {
     // fn game_finished_by_tiles(&self) -> bool {
     //     self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
     // }
+}
+
+impl Display for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_char().to_ascii_uppercase())
+    }
+}
+
+impl Index<usize> for Board {
+    type Output = [Option<BoardTile>; 15];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for Board {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Game::new()
+    }
 }
 
 #[cfg(test)]

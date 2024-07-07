@@ -1,26 +1,13 @@
-import './App.scss'
 import { useCallback, useEffect, useState } from 'react'
-import { ClientMessageT, ServerMessageT, TableT, serverAddr } from './client'
 import useWebSocket, { ReadyState } from 'react-use-websocket'
+import { ClientMessageT, ServerMessageT, TableT, serverAddr } from './client'
 import { GameView } from './GameView'
-import { InvalidMoveT, MoveT, TileT } from './game-types'
+import { MoveT } from './game-types'
 import { SetupView } from './SetupView'
-import { TileBar } from './gameview/TileBar'
+import { DebugInfo } from './DebugInfo'
+import './App.scss'
 
-const statuses = {
-  [ReadyState.CONNECTING]: 'connecting',
-  [ReadyState.OPEN]: 'open',
-  [ReadyState.CLOSING]: 'closing',
-  [ReadyState.CLOSED]: 'closed',
-  [ReadyState.UNINSTANTIATED]: 'uninstantiated',
-}
-
-const sockOptions = {
-  reconnectAttempts: 20,
-  reconnectInterval: 5000, // ms
-  shouldReconnect: () => true,
-}
-
+// When serving with vite dev server, this is true https://vitejs.dev/guide/env-and-mode
 const debugMode = import.meta.env.DEV
 
 const getStoredName = () => localStorage["name"]
@@ -28,11 +15,14 @@ const setStoredName = (name: string) => localStorage["name"] = name
 const delStoredName = () => localStorage.removeItem("name")
 
 const App = () => {
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, sockOptions)
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, {
+    reconnectAttempts: 20,
+    reconnectInterval: 5000, // ms
+    shouldReconnect: () => true,
+  })
   const sendMessage = useCallback((m: ClientMessageT) => sendJsonMessage(m), [sendJsonMessage])
 
   const [table, setTable] = useState<TableT | undefined>(undefined)
-  const [invalidMove, setInvalidMove] = useState<InvalidMoveT | undefined>(undefined)
   const [name, setName] = useState<string | undefined>(undefined)
 
   // If readyState changes to OPEN, send a request for an update.
@@ -53,7 +43,6 @@ const App = () => {
       if ("Table" in msg) {
         setTable(msg.Table)
       } else if ("InvalidMove" in msg) {
-        setInvalidMove(msg.InvalidMove)
         alert(msg.InvalidMove.explanation)
       } else {
         alert("Unhandled ServerMessage (see console)")
@@ -103,56 +92,25 @@ const App = () => {
   }
 
   if (debugMode) {
+    const statuses = {
+      [ReadyState.CONNECTING]: 'connecting',
+      [ReadyState.OPEN]: 'open',
+      [ReadyState.CLOSING]: 'closing',
+      [ReadyState.CLOSED]: 'closed',
+      [ReadyState.UNINSTANTIATED]: 'uninstantiated',
+    }
+
     const debugData = {
       "Socket is": statuses[readyState],
       name,
       storedName: getStoredName(),
       table,
       lastJsonMessage,
-      invalidMove,
     }
     elems.push(<br key="debugbreak" />)
     elems.push(<DebugInfo key="debuginfo" data={debugData} />)
   }
   return elems
-}
-
-const DebugInfo = ({ data }: { data: Record<string, unknown> }) => {
-  const [show, setShow] = useState(false)
-  const white = { color: "white" }
-  const blacklist = ["board", "tile_bag", "tiles"]
-
-  let debugPane
-  if (show) {
-    const stringify = (x: unknown) => {
-      return JSON.stringify(x, (k, v) => blacklist.includes(k) ? "(redacted)" : v, 1)
-    }
-
-    const listItems = Object.entries(data).map(([label, val], i) =>
-      <li key={i} style={white}>
-        <pre style={white}>
-          {label}: {stringify(val)}
-        </pre>
-      </li>)
-    const list = <ul style={{ border: "1px solid white", borderRadius: "3px" }}>{listItems}</ul>
-
-    debugPane = (
-      <>
-        {list}
-        <TileBar tiles={["A", "B", "C", "D", "E", "F", "G"]} onClickTile={() => {}} selectedTile={undefined} />
-        <TileBar tiles={["H", "I", "J", "K", "L", "M", "N"]} onClickTile={() => {}} selectedTile={undefined} />
-        <TileBar tiles={["O", "P", "Q", "R", "S", "T", "U"]} onClickTile={() => {}} selectedTile={undefined} />
-        <TileBar tiles={["V", "W", "X", "Y", "Z", "Blank", { "Blank": "X" } as unknown as TileT]} onClickTile={() => {}} selectedTile={undefined} />
-      </>
-    )
-  }
-
-  return (
-    <>
-      <button onClick={() => setShow(!show)}>debug info</button>
-      {debugPane}
-    </>
-  )
 }
 
 export default App
