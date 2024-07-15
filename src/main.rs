@@ -1,4 +1,3 @@
-mod encoding;
 mod game;
 
 use std::{
