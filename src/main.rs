@@ -26,6 +26,11 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    #[cfg(not(debug_assertions))]
+    {
+        once_cell::sync::Lazy::force(&game::solve::WORDLIST);
+    }
+
     println!("Scrabble server listening on port 2222");
     let g = Arc::new(GlobalState::new());
     let app = Router::new().route("/", get(move |ws, ci| handle_connection(ws, ci, g.clone())));
