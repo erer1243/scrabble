@@ -24,6 +24,9 @@ const applyMove = (board: BoardT, move: MoveT): BoardT => {
 const moveContainsPosition = (move: MoveT, pos: PositionT): boolean => move.tiles.some(([p, _t]) => p[0] == pos[0] && p[1] == pos[1])
 
 const getPlayer = (game: GameT, name: string | undefined): PlayerT & { index: number } | undefined => {
+  if (name === undefined)
+    return undefined
+
   const i = game.players.findIndex(p => p.name === name)
   return (i === -1) ? undefined : { ...game.players[i], index: i }
 }
@@ -62,18 +65,30 @@ const tileToBoardTile = (t: TileT): BoardTileT | null => {
 
 const boardTileToTile = (bt: BoardTileT): TileT => isBlank(bt) ? 'Blank' : bt as TileT
 
+const mod = (a: number, n: number) => (((a % n) + n) % n)
+
+const wasJustMyTurn = (game: GameT, name: string | undefined): boolean => {
+  const myIndex = getPlayer(game, name)?.index
+  return mod(game.whose_turn - 1, game.players.length) === myIndex
+}
+
 export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps) => {
   const [availableTiles, setAvailableTiles] = useState<Array<TileT>>(tilesOfName(game, name))
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
   const [move, setMove] = useState<MoveT>({ tiles: [] })
 
-  const resetState = useCallback(() => {
-    setAvailableTiles(tilesOfName(game, name))
+  const resetState = (keepTilebarOrder: boolean) => {
+    if (keepTilebarOrder) {
+      const tilesStillRearranged = [...availableTiles, ...move.tiles.map(t => boardTileToTile(t[1]))]
+      setAvailableTiles(tilesStillRearranged)
+    } else {
+      setAvailableTiles(tilesOfName(game, name))
+    }
     setSelectedTile(undefined)
     setMove({ tiles: [] })
-  }, [game, name])
+  }
 
-  useEffect(resetState, [game, name])
+  useEffect(() => resetState(!wasJustMyTurn(game, name)), [game, name])
 
   const onClickTileBarTile = (newSelectedTile: number) => {
     if (selectedTile === undefined) {
@@ -92,8 +107,13 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
     }
   }
 
-  const onClickRestoreTiles = resetState
-  const onClickSubmitMove = () => playMove(move)
+  const onClickRestoreTiles = () => resetState(true)
+  const onClickSubmitMove = () => {
+    if (move.tiles.length === 0)
+      alert("You didn't put any tiles on the board")
+    else
+      playMove(move)
+  }
   const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index
   const board = applyMove(game.board, move)
   const onClickBoardSquare = (x: number, y: number, occupied: boolean) => {
