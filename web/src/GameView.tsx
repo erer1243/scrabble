@@ -98,7 +98,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
     }
   }
   const onClickExchangeTiles = () => {
-    if (confirm("Swap your tiles for new ones?"))
+    if (confirm("Swap all of your tiles for new ones? (skip your turn)"))
       exchangeTiles()
   }
 

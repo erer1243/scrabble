@@ -73,7 +73,10 @@ const App = () => {
   const elems = [];
   switch (table?.state) {
     case "Setup": {
-      const startGame = () => sendMessage("StartGame")
+      const startGame = () => {
+        if (confirm("Start game for everyone?"))
+          sendMessage("StartGame")
+      }
       elems.push(<SetupView key="setup" game={table.game} joinGame={setName} name={name} startGame={startGame} />)
       break;
     }
