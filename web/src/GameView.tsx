@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Board } from "./gameview/Board"
 import { TileBar } from "./gameview/TileBar"
 import { Header } from "./gameview/Header"
@@ -66,18 +66,33 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
   const [availableTiles, setAvailableTiles] = useState<Array<TileT>>(tilesOfName(game, name))
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
   const [move, setMove] = useState<MoveT>({ tiles: [] })
-  const [resetMarker, setResetMarker] = useState(false)
 
-  useEffect(() => {
+  const resetState = useCallback(() => {
     setAvailableTiles(tilesOfName(game, name))
     setSelectedTile(undefined)
     setMove({ tiles: [] })
-  }, [resetMarker, game, name]);
+  }, [game, name])
 
-  const onClickTileBarTile = (selection: number) =>
-    setSelectedTile(selection !== selectedTile ? selection : undefined)
+  useEffect(resetState, [game, name])
 
-  const onClickResetTiles = () => setResetMarker(!resetMarker)
+  const onClickTileBarTile = (newSelectedTile: number) => {
+    if (selectedTile === undefined) {
+      // Select tile
+      setSelectedTile(newSelectedTile)
+    } else if (newSelectedTile === selectedTile) {
+      // Deselect tile
+      setSelectedTile(undefined)
+    } else {
+      // Swap two tiles in tilebar
+      const t = availableTiles[selectedTile]
+      availableTiles[selectedTile] = availableTiles[newSelectedTile]
+      availableTiles[newSelectedTile] = t
+      setSelectedTile(undefined)
+      setAvailableTiles(structuredClone(availableTiles))
+    }
+  }
+
+  const onClickRestoreTiles = resetState
   const onClickSubmitMove = () => playMove(move)
   const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index
   const board = applyMove(game.board, move)
@@ -91,7 +106,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       setSelectedTile(undefined)
     } else if (occupied && moveContainsPosition(move, [x, y])) {
       const tileIndex = move.tiles.findIndex(([pos, _t]) => pos[0] == x && pos[1] == y)
-      const tile = boardTileToTile(move.tiles[tileIndex][1]);
+      const tile = boardTileToTile(move.tiles[tileIndex][1])
       setMove({ tiles: arrRemove(move.tiles, tileIndex) })
       setAvailableTiles(arrAppend(availableTiles, tile))
       setSelectedTile(undefined)
@@ -108,7 +123,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
         <TileBar tiles={availableTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
-        <button className="button" onClick={onClickResetTiles}>Restore Tiles</button>
+        <button className="button" onClick={onClickRestoreTiles}>Restore Tiles</button>
         <button className="button" onClick={onClickSubmitMove} disabled={notYourTurn}>Submit Move</button>
         <button className="button" onClick={onClickExchangeTiles} disabled={notYourTurn}>Exchange Tiles</button>
       </div>
