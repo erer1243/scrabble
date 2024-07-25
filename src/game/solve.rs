@@ -1,13 +1,13 @@
 use std::{
     collections::HashMap,
     io::{self, BufRead, BufReader},
+    sync::LazyLock,
 };
 
 use super::{Board, BoardTile, InvalidMove, Move, Position};
 use itertools::Itertools;
-use once_cell::sync::Lazy;
 
-pub static WORDLIST: Lazy<Vec<String>> = Lazy::new(|| {
+pub static WORDLIST: LazyLock<Vec<String>> = LazyLock::new(|| {
     let reader;
 
     #[cfg(debug_assertions)]
@@ -40,7 +40,7 @@ pub fn is_word(s: &str) -> bool {
 }
 
 /// Includes the center as a double word modifier.
-pub static MODIFIERS: Lazy<HashMap<Position, Modifier>> = Lazy::new(|| {
+pub static MODIFIERS: LazyLock<HashMap<Position, Modifier>> = LazyLock::new(|| {
     type Positions = &'static [Position];
     #[rustfmt::skip] const TRIPLE_WORDS: Positions = &[(0, 0), (0, 7), (0, 14), (7, 0), (7, 14), (14, 0), (14, 7), (14, 14)];
     #[rustfmt::skip] const DOUBLE_WORDS: Positions = &[(7, 7), (1, 1), (2, 2), (3, 3), (4, 4), (10, 10), (11, 11), (12, 12), (13, 13), (1, 13), (2, 12), (3, 11), (4, 10), (13, 1), (12, 2), (11, 3), (10, 4)];
@@ -290,6 +290,6 @@ mod test {
 
     #[test]
     fn load_wordlist() {
-        once_cell::sync::Lazy::force(&WORDLIST);
+        LazyLock::force(&WORDLIST);
     }
 }

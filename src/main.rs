@@ -3,7 +3,7 @@ mod game;
 use std::{
     fmt::Display,
     net::SocketAddr,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{atomic::AtomicUsize, Arc, LazyLock},
     time::Duration,
 };
 
@@ -26,7 +26,7 @@ use tokio::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    once_cell::sync::Lazy::force(&game::solve::WORDLIST);
+    LazyLock::force(&game::solve::WORDLIST);
 
     println!("Scrabble server listening on port 2222");
     let g = Arc::new(GlobalState::new());
