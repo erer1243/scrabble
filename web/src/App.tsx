@@ -74,7 +74,7 @@ const App = () => {
   switch (table?.state) {
     case "Setup": {
       const startGame = () => {
-        if (confirm("Start game for everyone?"))
+        if (confirm("Start game for everyone? (only do this once everyone has joined)"))
           sendMessage("StartGame")
       }
       elems.push(<SetupView key="setup" game={table.game} joinGame={setName} name={name} startGame={startGame} />)
