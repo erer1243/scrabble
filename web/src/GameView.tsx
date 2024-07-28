@@ -143,7 +143,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
         <TileBar tiles={availableTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
-        <button className="button" onClick={onClickRestoreTiles}>Restore Tiles</button>
+        <button className="button" onClick={onClickRestoreTiles}>Reset Tiles</button>
         <button className="button" onClick={onClickSubmitMove} disabled={notYourTurn}>Submit Move</button>
         <button className="button" onClick={onClickExchangeTiles} disabled={notYourTurn}>Exchange Tiles</button>
       </div>
