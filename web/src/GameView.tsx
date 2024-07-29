@@ -38,21 +38,20 @@ const tilesOfName = (game: GameT, name: string | undefined): Array<TileT> => {
 
 const isBlank = (t: BoardTileT | TileT): boolean => t === 'Blank' || (typeof t === 'object' && 'Blank' in t)
 
-const tileToBoardTile = (t: TileT): BoardTileT | null => {
-  const promptForBlankTileFill = (): LetterT | null => {
-    const re = /^\s*[a-zA-Z]\s*$/
-    let match = null;
-    while (match === null) {
-      const answer = prompt("What letter should the blank tile be?");
-      if (answer === null)
-        return null
-      else
-        match = answer.match(re);
-    }
-
-    return match[0].trim().toUpperCase() as LetterT
+const promptForBlankTileFill = (): LetterT | null => {
+  const re = /^\s*[a-zA-Z]\s*$/
+  let match = null;
+  while (match === null) {
+    const answer = prompt("What letter should the blank tile be?");
+    if (answer === null)
+      return null
+    else
+      match = answer.match(re);
   }
 
+  return match[0].trim().toUpperCase() as LetterT
+}
+const tileToBoardTile = (t: TileT): BoardTileT | null => {
   if (isBlank(t)) {
     const letter = promptForBlankTileFill()
     if (letter === null)

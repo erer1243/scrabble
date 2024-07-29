@@ -18,7 +18,7 @@ const turnDescription = (turn: TurnT): string => {
 const turnDescriptions = (game: GameT): Array<string> => {
   const descs = [];
   let turnIdx = 0;
-  outer: while (true) {
+  outer: for (;;) {
     for (const player of game.players) {
       if (turnIdx < player.turns.length) {
         const desc = turnDescription(player.turns[turnIdx])

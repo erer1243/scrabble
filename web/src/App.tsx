@@ -17,7 +17,7 @@ const delStoredName = () => localStorage.removeItem("name")
 const App = () => {
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(serverAddr, {
     reconnectAttempts: 20,
-    reconnectInterval: 5000, // ms
+    reconnectInterval: attemptNumber => attemptNumber < 10 ? 1000 : 5000, // ms
     shouldReconnect: () => true,
   })
   const sendMessage = useCallback((m: ClientMessageT) => sendJsonMessage(m), [sendJsonMessage])
@@ -113,6 +113,7 @@ const App = () => {
     elems.push(<br key="debugbreak" />)
     elems.push(<DebugInfo key="debuginfo" data={debugData} />)
   }
+
   return elems
 }
 
