@@ -122,7 +122,13 @@ impl Connection {
             }
             ClientMessage::StartGame => {
                 let table = table!(mut);
-                ensure!(table.state == GameState::Setup, "Game already started");
+                if table.state != GameState::Setup {
+                    // If two people are in the game start prompt, this can lead to double starts.
+                    // Just ignore secondary start messages.
+                    log!("Ignored StartGame message");
+                    return Ok(());
+                }
+
                 ensure!(table.game.ready_to_play(), "Game is not ready to play");
                 table.state = GameState::Running;
                 table.game.start_game();
