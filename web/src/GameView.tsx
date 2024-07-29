@@ -3,8 +3,8 @@ import { Board } from "./gameview/Board"
 import { TileBar } from "./gameview/TileBar"
 import { Header } from "./gameview/Header"
 import { BoardT, BoardTileT, GameT, LetterT, MoveT, PlayerT, PositionT, TileT } from "./game-types"
-import "./GameView.scss"
 import { MoveHistory } from "./gameview/MoveHistory"
+import "./GameView.scss"
 
 export type GameViewProps = {
   game: GameT
@@ -14,14 +14,14 @@ export type GameViewProps = {
 }
 
 const arrAppend = <T,>(arr: Array<T>, val: T): Array<T> => [...arr, val]
-const arrRemove = <T,>(arr: Array<T>, i: number): Array<T> => arr.filter((_val, idx) => idx !== i)
-const applyMove = (board: BoardT, move: MoveT): BoardT => {
+const arrRemove = <T,>(arr: Array<T>, i: number): Array<T> => arr.slice(0, i).concat(arr.slice(i + 1))
+const applyMove = (board: BoardT, moveTiles: MoveT["tiles"]): BoardT => {
   const newBoard = structuredClone(board)
-  for (const [[x, y], tile] of move.tiles)
+  for (const [[x, y], tile] of moveTiles)
     newBoard[x][y] = tile
   return newBoard
 }
-const moveContainsPosition = (move: MoveT, pos: PositionT): boolean => move.tiles.some(([p, _t]) => p[0] == pos[0] && p[1] == pos[1])
+const moveContainsPosition = (moveTiles: MoveT["tiles"], pos: PositionT): boolean => moveTiles.some(([p, _t]) => p[0] == pos[0] && p[1] == pos[1])
 
 const getPlayer = (game: GameT, name: string | undefined): PlayerT & { index: number } | undefined => {
   if (name === undefined)
@@ -72,19 +72,25 @@ const wasJustMyTurn = (game: GameT, name: string | undefined): boolean => {
 }
 
 export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps) => {
-  const [availableTiles, setAvailableTiles] = useState<Array<TileT>>(tilesOfName(game, name))
+  const myTiles = tilesOfName(game, name);
+
+  const [barTiles, setBarTiles] = useState<Array<TileT>>(myTiles)
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
-  const [move, setMove] = useState<MoveT>({ tiles: [] })
+  const [moveTiles, setMoveTiles] = useState<MoveT["tiles"]>([])
 
   const resetState = (keepTilebarOrder: boolean) => {
     if (keepTilebarOrder) {
-      const tilesStillRearranged = [...availableTiles, ...move.tiles.map(t => boardTileToTile(t[1]))]
-      setAvailableTiles(tilesStillRearranged)
+      const tilesStillRearranged = [...barTiles, ...moveTiles.map(t => boardTileToTile(t[1]))]
+      if (tilesStillRearranged.length > 0) {
+        setBarTiles(tilesStillRearranged)
+      } else {
+        setBarTiles(myTiles)
+      }
     } else {
-      setAvailableTiles(tilesOfName(game, name))
+      setBarTiles(myTiles)
     }
     setSelectedTile(undefined)
-    setMove({ tiles: [] })
+    setMoveTiles([])
   }
 
   useEffect(() => resetState(!wasJustMyTurn(game, name)), [game, name])
@@ -98,39 +104,41 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       setSelectedTile(undefined)
     } else {
       // Swap two tiles in tilebar
-      const t = availableTiles[selectedTile]
-      availableTiles[selectedTile] = availableTiles[newSelectedTile]
-      availableTiles[newSelectedTile] = t
+      const t = barTiles[selectedTile]
+      barTiles[selectedTile] = barTiles[newSelectedTile]
+      barTiles[newSelectedTile] = t
       setSelectedTile(undefined)
-      setAvailableTiles(structuredClone(availableTiles))
+      setBarTiles(structuredClone(barTiles))
     }
   }
 
   const onClickRestoreTiles = () => resetState(true)
   const onClickSubmitMove = () => {
-    if (move.tiles.length === 0)
+    if (moveTiles.length === 0)
       alert("You didn't put any tiles on the board")
     else
-      playMove(move)
+      playMove({ tiles: moveTiles })
   }
   const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index
-  const board = applyMove(game.board, move)
+  const board = applyMove(game.board, moveTiles)
+
   const onClickBoardSquare = (x: number, y: number, occupied: boolean) => {
     if (selectedTile !== undefined && !occupied) {
-      const boardTile = tileToBoardTile(availableTiles[selectedTile]);
+      const boardTile = tileToBoardTile(barTiles[selectedTile]);
       if (boardTile) {
-        setMove({ tiles: arrAppend(move.tiles, [[x, y], boardTile]) })
-        setAvailableTiles(arrRemove(availableTiles, selectedTile))
+        setMoveTiles(arrAppend(moveTiles, [[x, y], boardTile]))
+        setBarTiles(arrRemove(barTiles, selectedTile))
       }
       setSelectedTile(undefined)
-    } else if (occupied && moveContainsPosition(move, [x, y])) {
-      const tileIndex = move.tiles.findIndex(([pos, _t]) => pos[0] == x && pos[1] == y)
-      const tile = boardTileToTile(move.tiles[tileIndex][1])
-      setMove({ tiles: arrRemove(move.tiles, tileIndex) })
-      setAvailableTiles(arrAppend(availableTiles, tile))
+    } else if (occupied && moveContainsPosition(moveTiles, [x, y])) {
+      const tileIndex = moveTiles.findIndex(([pos, _t]) => pos[0] == x && pos[1] == y)
+      const tile = boardTileToTile(moveTiles[tileIndex][1])
+      setMoveTiles(arrRemove(moveTiles, tileIndex))
+      setBarTiles(arrAppend(barTiles, tile))
       setSelectedTile(undefined)
     }
   }
+
   const onClickExchangeTiles = () => {
     if (confirm("Swap all of your tiles for new ones? (skip your turn)"))
       exchangeTiles()
@@ -141,7 +149,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       <Header game={game} name={name} />
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
-        <TileBar tiles={availableTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
+        <TileBar tiles={barTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
         <button className="button" onClick={onClickRestoreTiles}>Reset Tiles</button>
         <button className="button" onClick={onClickSubmitMove} disabled={notYourTurn}>Submit Move</button>
         <button className="button" onClick={onClickExchangeTiles} disabled={notYourTurn}>Exchange Tiles</button>
