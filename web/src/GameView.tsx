@@ -81,6 +81,8 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
   const resetState = (keepTilebarOrder: boolean) => {
     if (keepTilebarOrder) {
       const tilesStillRearranged = [...barTiles, ...moveTiles.map(t => boardTileToTile(t[1]))]
+      // On the first render of GameView (and maybe on some other consecutive renders?), barTiles and moveTiles are empty.
+      // This check acts as a failsafe, ignoring tilesStillRearranged in those cases
       if (tilesStillRearranged.length > 0) {
         setBarTiles(tilesStillRearranged)
       } else {

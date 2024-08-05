@@ -130,6 +130,7 @@ pub fn score_move(board: &Board, m: &Move) -> u32 {
 
     let mut score = 0;
     let mut word_multiplier = 1;
+    let all_tiles_bonus = if m.tiles.len() == 7 { 50 } else { 0 };
 
     for ((x, y), t) in &m.tiles {
         let modifier = if board[*x][*y].is_some() {
@@ -155,7 +156,7 @@ pub fn score_move(board: &Board, m: &Move) -> u32 {
         score += t.as_tile().point_value() * letter_multiplier;
     }
 
-    score * word_multiplier
+    score * word_multiplier + all_tiles_bonus
 }
 
 /// Preconditions: m is not empty, m is not a detached single letter, m doesn't overlap a previous move on the board
