@@ -164,7 +164,7 @@ impl Connection {
                 let name = self.name.as_ref().unwrap();
                 ensure!(table.game.is_players_turn(name), "It's not your turn");
                 match table.game.play_move(&m) {
-                    Ok(_) => (),
+                    Ok(()) => (),
                     Err(im) => {
                         update_everyone = false;
                         self.ws.send_msg(ServerMessage::InvalidMove(&im)).await?;

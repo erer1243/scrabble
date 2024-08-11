@@ -26,9 +26,14 @@ export type PlayedMoveT = {
   word_values: Array<[string, number]>
 }
 
+export type GameEndT =
+  | { RemainingTiles: Array<TileT> }
+  | { PlayedLastMove: number }
+
 export type TurnT = 
   | { PlayedMove: PlayedMoveT }
   | "TilesExchanged"
+  | { GameEnd: GameEndT }
 
 export type PlayerT = {
   name: string
@@ -41,6 +46,7 @@ export type GameT = {
   tile_bag: Array<TileT>
   players: Array<PlayerT>
   whose_turn: number
+  finished: boolean
 }
 
 // Constants from the game

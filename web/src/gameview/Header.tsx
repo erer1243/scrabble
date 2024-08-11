@@ -1,4 +1,4 @@
-import { GameT, PlayerT } from "../game-types"
+import { GameT, PlayerT, tileValues } from "../game-types"
 import "./Header.scss"
 
 export type GameViewHeaderProps = {
@@ -9,10 +9,16 @@ export type GameViewHeaderProps = {
 const scoreOfPlayer = (p: PlayerT): number =>
   p.turns.reduce((score, turn): number => {
     if (turn === "TilesExchanged") {
-      return score;
-    } else {
-      const value = turn.PlayedMove.word_values.reduce((subscore, word) => subscore + word[1], 0);
-      return score + value;
+      return score
+    } if ("PlayedMove" in turn) {
+      const value = turn.PlayedMove.word_values.reduce((subscore, word) => subscore + word[1], 0)
+      return score + value
+    } else /* ("GameEnd" in turn) */ {
+      if ("RemainingTiles" in turn.GameEnd) {
+        return score - turn.GameEnd.RemainingTiles.reduce((sum, tile) => sum + tileValues[tile], 0)
+      } else /* ("PlayedLastMove" in turn.GameEnd) */ {
+        return score + turn.GameEnd.PlayedLastMove
+      }
     }
   }, 0)
 
@@ -25,6 +31,13 @@ export const Header = ({ game, name }: GameViewHeaderProps) => {
     </div>
   )
 
+  let whoseTurnMessage;
+  if (game.finished) {
+    whoseTurnMessage = "Game over"
+  } else {
+    whoseTurnMessage = `It's ${curPlayer.name == name ? "your" : `${curPlayer.name}'s`} turn`
+  }
+
   return (
     <div className="game-view-header">
       <div className="scores">
@@ -32,7 +45,7 @@ export const Header = ({ game, name }: GameViewHeaderProps) => {
         {scores}
       </div>
       <div className="whose-turn">
-        <h3>It's {curPlayer.name == name ? "your" : `${curPlayer.name}'s`} turn</h3>
+        <h3>{whoseTurnMessage}</h3>
       </div>
     </div>
   )

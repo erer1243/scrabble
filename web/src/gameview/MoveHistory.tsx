@@ -1,4 +1,4 @@
-import { GameT, TurnT } from "../game-types"
+import { GameT, TurnT, tileValues } from "../game-types"
 import "./MoveHistory.scss"
 
 export type MoveHistoryProps = {
@@ -8,10 +8,18 @@ export type MoveHistoryProps = {
 const turnDescription = (turn: TurnT): string => {
   if (turn === "TilesExchanged") {
     return "exchanged their tiles"
-  } else {
+  } if ("PlayedMove" in turn) {
     const words = turn.PlayedMove.word_values.map(([word, _val]) => word.toUpperCase()).join(", ")
     const value = turn.PlayedMove.word_values.reduce((subscore, [_word, val]) => subscore + val, 0)
     return `played ${words} for ${value} points`
+  } else /* ("GameEnd" in turn) */ {
+    if ("RemainingTiles" in turn.GameEnd) {
+      const lostPoints = turn.GameEnd.RemainingTiles.reduce((sum, tile) => sum + tileValues[tile], 0)
+      const remainingTiles = turn.GameEnd.RemainingTiles.join(", ");
+      return `lost ${lostPoints} points by finishing with [${remainingTiles}]`
+    } else /* ("PlayedLastMove" in turn.GameEnd) */ {
+      return `gained ${turn.GameEnd.PlayedLastMove} points for playing the final move`
+    }
   }
 }
 

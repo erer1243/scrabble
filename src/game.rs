@@ -29,6 +29,8 @@ macro_rules! tile_enum {
 }
 
 tile_enum! {
+    /// Enum for letters in the alphabet. Does not contain a representation of a Blank tile, it is only alphabetical.
+    /// It has the same repr as the corresponding lowercase ascii char.
     #[repr(u8)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
     Letter { A = b'a', }
@@ -45,6 +47,8 @@ impl Letter {
 }
 
 tile_enum! {
+    /// Enum for Scrabble tiles that a player is holding. Contains all letters plus a Blank variant.
+    /// Like `Letter`, it is repr'd by corresponding ascii chars, while Blank is repr'd as `b'*'`.
     #[repr(u8)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
     Tile {
@@ -62,6 +66,35 @@ impl Tile {
         char::from(self.as_ascii())
     }
 
+    #[cfg(test)]
+    fn from_ascii(c: u8) -> Self {
+        if !(c.is_ascii_lowercase() || c == b'*') {
+            panic!("Invalid ascii byte for tile: {c}");
+        }
+
+        unsafe { std::mem::transmute(c) }
+    }
+
+    #[cfg(test)]
+    fn from_char(c: char) -> Self {
+        if !c.is_ascii_lowercase() {
+            panic!("Invalid char for tile: {c}");
+        }
+
+        Self::from_ascii(c as u8)
+    }
+
+    #[cfg(test)]
+    fn as_board_tile(self) -> BoardTile {
+        forr! { $tile:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z] $:
+            match self {
+                Self::Blank => panic!("Tile::Blank.as_board.tile()"),
+                $(Self::$tile => BoardTile::$tile,)*
+            }
+        }
+    }
+
+    /// Point value according to official Scrabble rules
     fn point_value(self) -> u32 {
         use Tile::*;
         match self {
@@ -76,6 +109,7 @@ impl Tile {
         }
     }
 
+    /// Number of each tile that comes in a regular Scrabble tile bag
     fn number_in_game(self) -> usize {
         use Tile::*;
         match self {
@@ -90,10 +124,6 @@ impl Tile {
         }
     }
 
-    // fn iter_alphabet() -> impl Iterator<Item = Tile> {
-    //     (b'a'..=b'z').map(|c| Tile::from_ascii(c).unwrap())
-    // }
-
     fn iter_game_count() -> impl Iterator<Item = Tile> {
         forr! { $tile:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Blank] $:
             iter::empty()
@@ -103,6 +133,7 @@ impl Tile {
 }
 
 tile_enum! {
+    /// Enum for tiles on the board. Blank tiles hold the `Letter` that they represent on the board.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
     BoardTile {
         Blank(Letter)
@@ -129,11 +160,26 @@ impl BoardTile {
     }
 }
 
-/// An attempt to play a word which may or may not be valid
+#[cfg(test)]
+impl From<Tile> for BoardTile {
+    fn from(t: Tile) -> Self {
+        forr! { $letter:tt in [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z] $:
+            match t {
+                Tile::Blank => panic!("BoardTile::from(Tile::Blank)"),
+                $(Tile::$letter => BoardTile::$letter,)*
+            }
+        }
+    }
+}
+
+/// A set of tiles at some position on a Scrabble board.
+/// `Move`s are not inherently valid - tiles in the move could overlap ones already on the board,
+/// overlap each other, be at invalid coordinates, contain letters the player doesn't have, etc.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Move {
     tiles: Vec<(Position, BoardTile)>,
 
+    /// internal field for optimizing move validation.
     #[serde(skip)]
     sorted: bool,
 }
@@ -198,6 +244,7 @@ impl Move {
     }
 }
 
+/// A player-facing message that explains why a move is invalid, along with a set of relevant board positions.
 #[derive(Clone, Debug, Serialize)]
 pub struct InvalidMove {
     pub explanation: String,
@@ -213,22 +260,18 @@ impl InvalidMove {
     }
 }
 
-/// A move that a player previously made, that produced some number of new words on the board
-/// and was worth some number of points.
+/// A move that a player previously played, along with the new words it introduced and their point values.
+/// The value of the whole move is the sum of the words' values.
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayedMove {
     original_move: Move,
     word_values: Vec<(String, u32)>,
 }
 
-impl PlayedMove {
-    // fn value(&self) -> u32 {
-    //     self.word_values.iter().map(|(_, value)| value).sum()
-    // }
-}
-
+/// A position on the board.
 pub type Position = (usize, usize);
 
+/// A game board, a 15x15 array of optional `BoardTile`s
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 pub struct Board([[Option<BoardTile>; 15]; 15]);
 
@@ -301,18 +344,18 @@ impl Board {
 }
 
 #[derive(Clone, Debug, Serialize)]
+enum GameEnd {
+    /// The player did not play the last move, and so has some remaining tiles that they lose points for.
+    RemainingTiles(Vec<Tile>),
+    /// The player used all of their tiles, and gained this many points from other players' remaining tiles.
+    PlayedLastMove(u32),
+}
+
+#[derive(Clone, Debug, Serialize)]
 enum Turn {
     PlayedMove(PlayedMove),
     TilesExchanged,
-}
-
-impl Turn {
-    // fn value(&self) -> u32 {
-    //     match self {
-    //         Turn::PlayedMove(pm) => pm.value(),
-    //         Turn::TilesExchanged => 0,
-    //     }
-    // }
+    GameEnd(GameEnd),
 }
 
 #[derive(Default, Clone, Debug, Serialize)]
@@ -362,6 +405,7 @@ pub struct Game {
     tile_bag: Vec<Tile>,
     players: Vec<Player>,
     whose_turn: usize,
+    finished: bool,
 }
 
 impl Game {
@@ -371,6 +415,7 @@ impl Game {
             board: Board::default(),
             tile_bag: Tile::iter_game_count().collect(),
             whose_turn: 0,
+            finished: false,
         }
     }
 
@@ -384,10 +429,9 @@ impl Game {
     }
 
     pub fn play_move(&mut self, m: &Move) -> Result<(), InvalidMove> {
-        let n_players = self.players.len();
-        let player = &mut self.players[self.whose_turn];
+        #[rustfmt::skip] macro_rules! player { () => { &mut self.players[self.whose_turn] }; }
 
-        if !player.has_tiles_to_play_move(m) {
+        if !player!().has_tiles_to_play_move(m) {
             return Err(InvalidMove::new(
                 "Tiles played that you don't have (impossible)",
                 vec![],
@@ -395,12 +439,27 @@ impl Game {
         }
 
         let played_move = self.board.play_move(m)?;
-        player.turns.push(Turn::PlayedMove(played_move));
-        player.remove_played_tiles(m);
-        player.refill_tiles_from(&mut self.tile_bag);
-        self.whose_turn += 1;
-        self.whose_turn %= n_players;
+        player!().turns.push(Turn::PlayedMove(played_move));
+        player!().remove_played_tiles(m);
+        player!().refill_tiles_from(&mut self.tile_bag);
 
+        if !self.finished && self.game_finished_by_tiles() {
+            let mut gained_points = 0;
+            for (i, p) in self.players.iter_mut().enumerate() {
+                if i != self.whose_turn {
+                    let tiles = p.tiles.clone();
+                    gained_points += tiles.iter().map(|t| t.point_value()).sum::<u32>();
+                    p.turns.push(Turn::GameEnd(GameEnd::RemainingTiles(tiles)))
+                }
+            }
+
+            player!()
+                .turns
+                .push(Turn::GameEnd(GameEnd::PlayedLastMove(gained_points)));
+            self.finished = true;
+        }
+
+        self.advance_turn();
         Ok(())
     }
 
@@ -411,8 +470,7 @@ impl Game {
         player.turns.push(Turn::TilesExchanged);
         player.tiles.clear();
         player.refill_tiles_from(&mut self.tile_bag);
-        self.whose_turn += 1;
-        self.whose_turn %= self.players.len();
+        self.advance_turn();
     }
 
     fn index_of_player(&self, name: &str) -> Option<usize> {
@@ -421,6 +479,11 @@ impl Game {
             .enumerate()
             .find(|(_, p)| p.name == name)
             .map(|(i, _)| i)
+    }
+
+    fn advance_turn(&mut self) {
+        self.whose_turn += 1;
+        self.whose_turn %= self.players.len();
     }
 
     // fn player(&self, name: &str) -> Option<&Player> {
@@ -439,9 +502,9 @@ impl Game {
         self.index_of_player(name).is_some()
     }
 
-    pub fn add_player(&mut self, name: String) {
+    pub fn add_player<T: Into<String>>(&mut self, name: T) {
         self.players.push(Player {
-            name,
+            name: name.into(),
             ..Default::default()
         })
     }
@@ -459,9 +522,9 @@ impl Game {
         &mut self.players[self.whose_turn]
     }
 
-    // fn game_finished_by_tiles(&self) -> bool {
-    //     self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
-    // }
+    fn game_finished_by_tiles(&self) -> bool {
+        self.tile_bag.is_empty() && self.players.iter().any(|p| p.tiles.is_empty())
+    }
 }
 
 impl Display for Tile {
@@ -505,29 +568,107 @@ mod test {
         assert_eq!(Board::default()[0].len(), 15);
     }
 
-    #[test]
-    fn two_player_game_test() {
-        let mut g = Game::new();
-        g.add_player("Alice".to_string());
-        g.add_player("Bob".to_string());
-        g.start_game();
+    fn play_move<T: Into<BoardTile> + Copy>(
+        g: &mut Game,
+        m: &[(usize, usize, T)],
+    ) -> Result<(), InvalidMove> {
+        let p = g.current_player_mut();
+        let mut tiles = Vec::new();
+        for (x, y, t) in m.iter().copied() {
+            let t = t.into();
+            tiles.push(((x, y), t));
+            p.tiles.push(t.as_tile());
+        }
+        g.play_move(&Move::new(tiles))
+    }
 
-        macro_rules! play_move {
-            ($(($x:expr, $y:expr, $t:ident $($body:tt)?)),*) => {{
-                let p = g.current_player_mut();
-                $(
-                    p.tiles.pop().unwrap();
-                    p.tiles.insert(0, Tile::$t);
-                )*
-                g.play_move(&Move::new(vec![$((($x, $y), BoardTile::$t $($body)? )),*]))
-            }}
+    fn game(n_players: usize) -> Game {
+        const PLAYERS: &[&str] = &["Alice", "Bob", "Charlie", "Daniel", "Elizabeth", "Frank"];
+        let mut g = Game::new();
+        for p in PLAYERS.iter().take(n_players) {
+            g.add_player(*p);
+        }
+        g.start_game();
+        g
+    }
+
+    #[test]
+    fn extra_50_points_test() {
+        fn value_of_letters(s: &str) -> u32 {
+            s.chars().map(|c| Tile::from_char(c).point_value()).sum()
         }
 
-        play_move![(0, 0, T), (0, 1, O), (0, 2, P)].unwrap_err();
+        fn play_7_letters(s: &str) -> anyhow::Result<u32> {
+            let mut g = game(2);
 
-        play_move![(7, 6, O), (7, 7, A), (7, 8, T)].unwrap();
-        play_move![(5, 8, N), (6, 8, U)].unwrap();
+            for t in s.chars().map(Tile::from_char) {
+                g.players[0].tiles.push(t);
+            }
 
-        play_move![(0, 0, T), (0, 1, O), (0, 2, P)].unwrap_err();
+            let tiles = s
+                .chars()
+                .zip(4..)
+                .map(|(c, x)| ((x, 7), Tile::from_char(c).as_board_tile()))
+                .collect();
+            let mov = Move::new(tiles);
+            g.play_move(&mov).unwrap();
+            let Turn::PlayedMove(pm) = g.players[0].turns[0].clone() else {
+                unreachable!()
+            };
+            assert_eq!(mov, pm.original_move);
+            Ok(pm.word_values[0].1)
+        }
+
+        const WORDS: &[&str] = &[
+            "clonism", "lizards", "pimento", "elmwood", "torques", "souffle", "polling", "cerotic",
+            "gestalt", "deskmen", "clewing", "retrace", "woodmen", "netsurf", "outback", "empathy",
+            "erepsin", "maftirs", "hornito", "editors", "gerenuk", "opiated", "keglers", "jihadis",
+            "burrers", "lixivia", "meeters", "broiler", "dogsled", "anymore", "capeesh", "sojourn",
+        ];
+
+        for s in WORDS {
+            let letter_value = value_of_letters(s);
+            let move_value = play_7_letters(s).unwrap();
+            assert_eq!(move_value, letter_value * 2 + 50);
+        }
+    }
+
+    #[test]
+    fn game_end_test() {
+        use Tile::*;
+
+        let mut g = game(2);
+        g.tile_bag.clear();
+        g.players[0].tiles = vec![]; // test::play_move adds necessary tiles on demand
+        g.players[1].tiles = vec![Z, Z, Z, Z, Z]; // 5 * 10 points
+
+        play_move(&mut g, &[(7, 7, F), (7, 8, I), (7, 9, N)]).unwrap();
+        assert!(g.finished);
+        assert_eq!(g.players[0].turns.len(), 2);
+
+        let Turn::GameEnd(GameEnd::PlayedLastMove(50)) = g.players[0].turns[1].clone() else {
+            unreachable!()
+        };
+
+        let Turn::GameEnd(GameEnd::RemainingTiles(ts)) = g.players[1].turns[0].clone() else {
+            unreachable!()
+        };
+        assert_eq!(ts, &[Z, Z, Z, Z, Z])
+    }
+
+    #[test]
+    fn two_player_game_test() {
+        use BoardTile::*;
+
+        let mut g = game(2);
+
+        // Doesn't cross the center
+        play_move(&mut g, &[(0, 0, T), (0, 1, O), (0, 2, P)]).unwrap_err();
+
+        play_move(&mut g, &[(7, 6, O), (7, 7, A), (7, 8, T)]).unwrap();
+        play_move(&mut g, &[(5, 8, N), (6, 8, U)]).unwrap();
+
+        // Is disconnected from existing tiles
+        play_move(&mut g, &[(0, 0, T), (0, 1, O), (0, 2, P)]).unwrap_err();
     }
 }

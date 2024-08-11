@@ -121,7 +121,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
     else
       playMove({ tiles: moveTiles })
   }
-  const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index
+  const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index || game.finished
   const board = applyMove(game.board, moveTiles)
 
   const onClickBoardSquare = (x: number, y: number, occupied: boolean) => {
