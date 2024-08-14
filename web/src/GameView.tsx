@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useMemo, useState } from "react"
 import { Board } from "./gameview/Board"
 import { TileBar } from "./gameview/TileBar"
 import { Header } from "./gameview/Header"
@@ -51,6 +51,7 @@ const promptForBlankTileFill = (): LetterT | null => {
 
   return match[0].trim().toUpperCase() as LetterT
 }
+
 const tileToBoardTile = (t: TileT): BoardTileT | null => {
   if (isBlank(t)) {
     const letter = promptForBlankTileFill()
@@ -64,64 +65,30 @@ const tileToBoardTile = (t: TileT): BoardTileT | null => {
 
 const boardTileToTile = (bt: BoardTileT): TileT => isBlank(bt) ? 'Blank' : bt as TileT
 
-const mod = (a: number, n: number) => (((a % n) + n) % n)
-
-const wasJustMyTurn = (game: GameT, name: string | undefined): boolean => {
-  const myIndex = getPlayer(game, name)?.index
-  return mod(game.whose_turn - 1, game.players.length) === myIndex
-}
-
 export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps) => {
-  const myTiles = tilesOfName(game, name);
-
+  const myTiles = useMemo(() => tilesOfName(game, name), [game, name]);
   const [barTiles, setBarTiles] = useState<Array<TileT>>(myTiles)
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
   const [moveTiles, setMoveTiles] = useState<MoveT["tiles"]>([])
 
-  const resetState = (keepTilebarOrder: boolean) => {
-    if (keepTilebarOrder) {
-      const tilesStillRearranged = [...barTiles, ...moveTiles.map(t => boardTileToTile(t[1]))]
-      // On the first render of GameView (and maybe on some other consecutive renders?), barTiles and moveTiles are empty.
-      // This check acts as a failsafe, ignoring tilesStillRearranged in those cases
-      if (tilesStillRearranged.length > 0) {
-        setBarTiles(tilesStillRearranged)
-      } else {
-        setBarTiles(myTiles)
-      }
-    } else {
-      setBarTiles(myTiles)
-    }
+  const onClickTileBarTile = (newSelectedTile: number) => {
+    if (selectedTile === newSelectedTile)
+      setSelectedTile(undefined)
+    else
+      setSelectedTile(newSelectedTile)
+  }
+  const onClickResetTiles = () => {
+    setBarTiles(myTiles)
     setSelectedTile(undefined)
     setMoveTiles([])
   }
-
-  useEffect(() => resetState(!wasJustMyTurn(game, name)), [game, name])
-
-  const onClickTileBarTile = (newSelectedTile: number) => {
-    if (selectedTile === undefined) {
-      // Select tile
-      setSelectedTile(newSelectedTile)
-    } else if (newSelectedTile === selectedTile) {
-      // Deselect tile
-      setSelectedTile(undefined)
-    } else {
-      // Swap two tiles in tilebar
-      const t = barTiles[selectedTile]
-      barTiles[selectedTile] = barTiles[newSelectedTile]
-      barTiles[newSelectedTile] = t
-      setSelectedTile(undefined)
-      setBarTiles(structuredClone(barTiles))
-    }
-  }
-
-  const onClickRestoreTiles = () => resetState(true)
   const onClickSubmitMove = () => {
     if (moveTiles.length === 0)
       alert("You didn't put any tiles on the board")
     else
       playMove({ tiles: moveTiles })
   }
-  const notYourTurn = game.whose_turn !== getPlayer(game, name)?.index || game.finished
+  const notYourTurn = game.finished || game.whose_turn !== getPlayer(game, name)?.index
   const board = applyMove(game.board, moveTiles)
 
   const onClickBoardSquare = (x: number, y: number, occupied: boolean) => {
@@ -152,7 +119,7 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       <div className="tile-bar-div">
         <h2 className="label">Your Tiles:</h2>
         <TileBar tiles={barTiles} onClickTile={onClickTileBarTile} selectedTile={selectedTile} />
-        <button className="button" onClick={onClickRestoreTiles}>Reset Tiles</button>
+        <button className="button" onClick={onClickResetTiles}>Reset Tiles</button>
         <button className="button" onClick={onClickSubmitMove} disabled={notYourTurn}>Submit Move</button>
         <button className="button" onClick={onClickExchangeTiles} disabled={notYourTurn}>Exchange Tiles</button>
       </div>
