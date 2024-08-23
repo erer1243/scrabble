@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Board } from "./gameview/Board"
 import { TileBar } from "./gameview/TileBar"
 import { Header } from "./gameview/Header"
@@ -66,8 +66,7 @@ const tileToBoardTile = (t: TileT): BoardTileT | null => {
 const boardTileToTile = (bt: BoardTileT): TileT => isBlank(bt) ? 'Blank' : bt as TileT
 
 export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps) => {
-  const myTiles = useMemo(() => tilesOfName(game, name), [game, name]);
-  const [barTiles, setBarTiles] = useState<Array<TileT>>(myTiles)
+  const [barTiles, setBarTiles] = useState<Array<TileT>>([])
   const [selectedTile, setSelectedTile] = useState<number | undefined>(undefined)
   const [moveTiles, setMoveTiles] = useState<MoveT["tiles"]>([])
 
@@ -78,10 +77,11 @@ export const GameView = ({ game, name, playMove, exchangeTiles }: GameViewProps)
       setSelectedTile(newSelectedTile)
   }
   const onClickResetTiles = () => {
-    setBarTiles(myTiles)
+    setBarTiles(tilesOfName(game, name))
     setSelectedTile(undefined)
     setMoveTiles([])
   }
+  useEffect(onClickResetTiles, [game, name])
   const onClickSubmitMove = () => {
     if (moveTiles.length === 0)
       alert("You didn't put any tiles on the board")
