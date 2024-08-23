@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 import { ClientMessageT, ServerMessageT, TableT, serverAddr } from './client'
 import { GameView } from './GameView'
@@ -20,7 +20,7 @@ const App = () => {
     reconnectInterval: attemptNumber => attemptNumber < 10 ? 1000 : 5000, // ms
     shouldReconnect: () => true,
   })
-  const sendMessage = useCallback((m: ClientMessageT) => sendJsonMessage(m), [sendJsonMessage])
+  const sendMessage = (m: ClientMessageT) => sendJsonMessage(m)
 
   const [table, setTable] = useState<TableT | undefined>(undefined)
   const [name, setName] = useState<string | undefined>(undefined)
@@ -34,7 +34,7 @@ const App = () => {
       setTable(undefined)
       setName(undefined)
     }
-  }, [readyState, sendMessage])
+  }, [readyState])
 
   // Handle the latest message from the server
   useEffect(() => {
@@ -51,12 +51,13 @@ const App = () => {
     }
   }, [lastJsonMessage])
 
+  // When the user enters their name, send that name to the server and add it to local storage
   useEffect(() => {
     if (name !== undefined) {
       setStoredName(name)
       sendMessage({ "JoinWithName": name })
     }
-  }, [name, sendMessage])
+  }, [name])
 
   useEffect(() => {
     const storedName = getStoredName()
@@ -72,26 +73,21 @@ const App = () => {
 
   const elems = [];
   switch (table?.state) {
-    case "Setup": {
+    case "Setup":
       const startGame = () => {
         if (confirm("Start game for everyone? (only do this once everyone has joined)"))
           sendMessage("StartGame")
       }
       elems.push(<SetupView key="setup" game={table.game} joinGame={setName} name={name} startGame={startGame} />)
       break;
-    }
-
-    case "Running": {
+    case "Running":
       const playMove = (move: MoveT) => sendMessage({ "PlayMove": move })
       const exchangeTiles = () => sendMessage("ExchangeTiles")
       elems.push(<GameView key="game" game={table.game} name={name} playMove={playMove} exchangeTiles={exchangeTiles} />)
       break;
-    }
-
-    case undefined: {
+    case undefined:
       elems.push(<h1 key="notconnected" style={{ color: 'white' }}>Not connected</h1>)
       break;
-    }
   }
 
   if (debugMode) {
