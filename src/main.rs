@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpListener,
     sync::{broadcast, RwLock},
+    time::timeout,
 };
 
 #[tokio::main(flavor = "current_thread")]
@@ -49,12 +50,12 @@ async fn handle_connection(
 
 tokio::task_local! {
     // Connection ID
-    static CID: usize;
+    static CONNECTION_ID: usize;
 }
 
 macro_rules! log {
     ($($x:tt)*) => {
-        CID.with(|cid| println!("[{}] {}", cid, format_args!($($x)*)))
+        CONNECTION_ID.with(|cid| println!("[{}] {}", cid, format_args!($($x)*)))
     };
 }
 
@@ -68,21 +69,22 @@ struct Connection {
 
 impl Connection {
     async fn handle_connection(ws: WebSocket, g: Global, addr: SocketAddr) {
-        CID.scope(count(), async move {
-            let update_recv = g.update_send.subscribe();
-            let mut handler = Connection {
-                ws,
-                g,
-                addr,
-                name: None,
-                update_recv,
-            };
+        CONNECTION_ID
+            .scope(count(), async move {
+                let update_recv = g.update_send.subscribe();
+                let mut handler = Connection {
+                    ws,
+                    g,
+                    addr,
+                    name: None,
+                    update_recv,
+                };
 
-            if let Err(e) = handler.main_loop().await {
-                log!("Error: {e}");
-            }
-        })
-        .await
+                if let Err(e) = handler.main_loop().await {
+                    log!("Error: {e}");
+                }
+            })
+            .await
     }
 
     async fn main_loop(&mut self) -> Result<()> {
@@ -108,17 +110,23 @@ impl Connection {
     }
 
     async fn handle_message(&mut self, msg: ClientMessage) -> Result<()> {
-        #[rustfmt::skip]
         macro_rules! table {
-            () => { &*self.g.table.read().await };
-            (mut) => { &mut *self.g.table.write().await };
+            () => {{
+                let timeout = timeout(Duration::from_secs(10), self.g.table.read());
+                &*timeout.await.expect("Rwlock read timeout")
+            }};
+            (mut) => {{
+                let timeout = timeout(Duration::from_secs(10), self.g.table.write());
+                &mut *timeout.await.expect("Rwlock write timeout")
+            }};
         }
 
         let mut update_everyone = true;
         match msg {
             ClientMessage::UpdateMe => {
+                let table = table!();
                 update_everyone = false;
-                self.ws.send_msg(ServerMessage::Table(table!())).await?;
+                self.ws.send_msg(ServerMessage::Table(table)).await?;
             }
             ClientMessage::StartGame => {
                 let table = table!(mut);
@@ -128,7 +136,6 @@ impl Connection {
                     log!("Ignored StartGame message");
                     return Ok(());
                 }
-
                 ensure!(table.game.ready_to_play(), "Game is not ready to play");
                 table.state = GameState::Running;
                 table.game.start_game();
@@ -138,7 +145,6 @@ impl Connection {
                     self.name.is_none() || self.name.as_ref().unwrap() == &name,
                     "Player is already in the game but tried to set a new name"
                 );
-
                 let table = table!(mut);
                 if table.game.has_player(&name) {
                     update_everyone = false;
@@ -177,7 +183,6 @@ impl Connection {
                 ensure!(self.name.is_some(), "Not in the game");
                 let name = self.name.as_ref().unwrap();
                 ensure!(table.game.is_players_turn(name), "It's not your turn");
-
                 table.game.exchange_tiles();
             }
         }
