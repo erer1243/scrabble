@@ -1,4 +1,7 @@
 mod game;
+mod version {
+    include!(concat!(env!("OUT_DIR"), "/version.rs"));
+}
 
 use std::{
     fmt::Display,
@@ -24,9 +27,12 @@ use tokio::{
     sync::{broadcast, RwLock},
     time::timeout,
 };
+use version::COMMIT_HASH;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    println!("Server version: {COMMIT_HASH}");
+
     LazyLock::force(&game::solve::WORDLIST);
 
     println!("Scrabble server listening on port 2222");
