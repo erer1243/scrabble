@@ -31,6 +31,11 @@ use version::COMMIT_HASH;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    if std::env::args().any(|s| s == "--version" || s == "-v") {
+        println!("{COMMIT_HASH}");
+        return;
+    }
+
     println!("Server version: {COMMIT_HASH}");
 
     LazyLock::force(&game::solve::WORDLIST);
